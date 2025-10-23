@@ -1,0 +1,23 @@
+{
+  "settings": {
+    "check_interval": 60,
+    "cooldown": 300,
+    "notifications_enabled": true
+  },
+  "tickers": [
+    {
+      "symbol": "AAPL",
+      "name": "Apple Inc.",
+      "high_threshold": 190.0,
+      "low_threshold": 180.0,
+      "enabled": true
+    },
+    {
+      "symbol": "MSFT",
+      "name": "Microsoft Corp.",
+      "high_threshold": 410.0,
+      "low_threshold": 375.0,
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+yfinance==0.2.38
+winotify==1.1.0
+requests==2.31.0
+pillow==10.0.0
+FreeSimpleGUI>=5.0.0
