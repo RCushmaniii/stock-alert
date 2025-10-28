@@ -5,6 +5,7 @@ Provides a visual form for managing stock alert settings
 
 import json
 import os
+import sys
 import FreeSimpleGUI as sg
 from utils.data_provider import DataProvider
 
@@ -409,6 +410,16 @@ class ConfigEditor:
 
 def main():
     """Entry point for config editor"""
+    # Change to the directory where the executable is located
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        app_dir = os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    os.chdir(app_dir)
+    
     editor = ConfigEditor()
     editor.run()
 

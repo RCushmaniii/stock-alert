@@ -1,0 +1,15 @@
+# Build and packaging dependencies for creating MSI installer
+# Install with: pip install -r requirements-build.txt
+
+# Core application dependencies (from requirements.txt)
+yfinance==0.2.38
+winotify==1.1.0
+requests==2.31.0
+pillow==10.0.0
+FreeSimpleGUI>=5.0.0
+pytz>=2024.1
+pystray>=0.19.5
+
+# Build tools for creating executables and MSI installers
+pyinstaller==6.3.0      # Creates standalone executables
+cx-Freeze==7.2.8        # Creates MSI installers for Windows (Python 3.12 compatible)

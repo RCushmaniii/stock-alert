@@ -32,7 +32,18 @@
 - **Python:** 3.8 or higher
 - **Internet Connection:** Required for real-time stock data
 
-### Installation
+### Installation Options
+
+#### Option 1: MSI Installer (Recommended for End Users)
+
+Download and run the latest MSI installer from the releases page. This will:
+- Install StockAlert to Program Files
+- Create Start Menu shortcuts
+- Include all dependencies
+
+See [BUILD_MSI.md](docs/BUILD_MSI.md) for building your own MSI installer.
+
+#### Option 2: From Source (For Developers)
 
 1. **Clone the repository:**
    ```powershell
@@ -242,6 +253,9 @@ aa-stock-alert/
 ├── config.json              # User configuration (gitignored)
 ├── config.example.json      # Configuration template
 ├── requirements.txt         # Python dependencies
+├── requirements-build.txt   # Build/packaging dependencies
+├── setup.py                 # cx_Freeze MSI build configuration
+├── build_msi.ps1           # Automated MSI build script
 ├── stock_alert.ico          # Notification icon
 ├── README.md               # This file
 ├── .gitignore              # Git ignore rules
@@ -251,7 +265,8 @@ aa-stock-alert/
 └── docs/
     ├── prd.md              # Product requirements
     ├── project-plan.md     # Development roadmap
-    └── PHASE2_COMPLETE.md  # Phase 2 completion notes
+    ├── PHASE2_COMPLETE.md  # Phase 2 completion notes
+    └── BUILD_MSI.md        # MSI installer build guide
 ```
 
 ## 🏗️ Architecture

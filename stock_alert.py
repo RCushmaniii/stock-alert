@@ -6,6 +6,8 @@ Multi-stock monitoring with JSON configuration and Windows Toast notifications
 import time
 import json
 import os
+import sys
+import shutil
 from winotify import Notification, audio
 from datetime import datetime
 from utils.data_provider import DataProvider
@@ -282,13 +284,35 @@ class StockAlert:
 
 def main():
     """Entry point for Phase 2"""
+    # Change to the directory where the executable is located
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        app_dir = os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    os.chdir(app_dir)
+    
+    # Auto-create config.json from example if it doesn't exist
+    if not os.path.exists('config.json'):
+        if os.path.exists('config.example.json'):
+            print("📋 No config.json found. Creating from config.example.json...")
+            shutil.copy('config.example.json', 'config.json')
+            print("✅ config.json created successfully!")
+            print("💡 You can customize it using StockAlertConfig.exe or by editing config.json\n")
+        else:
+            print("❌ Neither config.json nor config.example.json found!")
+            print("💡 Please ensure config.example.json exists in the application directory")
+            return
+    
     try:
         alert = StockAlert(config_path='config.json')
         alert.run()
     except Exception as e:
         print(f"❌ Failed to start StockAlert: {e}")
         print(f"\n💡 Make sure config.json exists and is valid")
-        print(f"   You can copy config.example.json to config.json to get started")
+        print(f"   You can edit it using StockAlertConfig.exe or manually")
 
 
 if __name__ == "__main__":
