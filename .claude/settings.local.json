@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(python run.py:*)",
+      "Bash(pytest:*)",
+      "Bash(pip:*)",
+      "Bash(pip install:*)",
+      "Bash(pip list:*)",
+      "Bash(ruff:*)",
+      "Bash(mypy:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git checkout:*)",
+      "Bash(git branch:*)",
+      "Bash(taskkill:*)",
+      "Bash(tasklist:*)"
+    ],
+    "deny": []
+  },
+  "env": {
+    "PYTHONPATH": "src"
+  }
+}
