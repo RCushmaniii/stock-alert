@@ -56,7 +56,8 @@ class StockAlertApp:
         if getattr(sys, "frozen", False):
             self.app_dir = Path(sys.executable).parent
         else:
-            self.app_dir = Path(__file__).parent.parent.parent
+            # Resolve to absolute path first, then traverse up from src/stockalert/app.py
+            self.app_dir = Path(__file__).resolve().parent.parent.parent
 
         # Set working directory
         os.chdir(self.app_dir)
@@ -100,10 +101,11 @@ class StockAlertApp:
 
         api_key = os.environ.get("FINNHUB_API_KEY", "")
         if not api_key:
-            # Try loading from .env
+            # Try loading from .env in project root
             from dotenv import load_dotenv
 
-            load_dotenv()
+            env_path = self.app_dir / ".env"
+            load_dotenv(env_path)
             api_key = os.environ.get("FINNHUB_API_KEY", "")
 
         if not api_key:
