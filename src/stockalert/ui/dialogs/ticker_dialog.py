@@ -152,7 +152,7 @@ class TickerDialog(QDialog):
         self.status_label.setText("")
 
     def _validate_symbol(self) -> None:
-        """Validate the entered symbol."""
+        """Validate the entered symbol and auto-fill company name."""
         symbol = self.symbol_edit.text().strip().upper()
         if not symbol:
             self.status_label.setText(_("errors.symbol_required"))
@@ -168,11 +168,42 @@ class TickerDialog(QDialog):
         QCoreApplication.processEvents()
 
         try:
-            # Try to validate with API (if available)
-            # For now, just accept the symbol
-            # In production, this would call the API provider
-            self.status_label.setText(_("tickers.valid_symbol"))
-            self.status_label.setStyleSheet("color: green;")
+            # Try to validate with Finnhub API and get company name
+            from stockalert.api.finnhub import FinnhubProvider
+            import os
+            from dotenv import load_dotenv
+            from pathlib import Path
+
+            # Load API key
+            app_dir = Path(__file__).resolve().parent.parent.parent.parent
+            load_dotenv(app_dir / ".env")
+            api_key = os.environ.get("FINNHUB_API_KEY", "")
+
+            if api_key:
+                provider = FinnhubProvider(api_key=api_key)
+                results = provider.search_symbols(symbol)
+
+                # Find exact match
+                company_name = None
+                for result in results:
+                    if result.get("symbol", "").upper() == symbol:
+                        company_name = result.get("description", "")
+                        break
+
+                if company_name:
+                    # Auto-fill company name if empty
+                    if not self.name_edit.text().strip():
+                        self.name_edit.setText(company_name)
+                    self.status_label.setText(_("tickers.valid_symbol"))
+                    self.status_label.setStyleSheet("color: green;")
+                else:
+                    self.status_label.setText(_("tickers.invalid_symbol"))
+                    self.status_label.setStyleSheet("color: red;")
+            else:
+                # No API key - accept symbol but warn
+                self.status_label.setText(_("tickers.valid_symbol"))
+                self.status_label.setStyleSheet("color: orange;")
+
         except Exception as e:
             logger.exception("Symbol validation failed")
             self.status_label.setText(_("tickers.invalid_symbol"))

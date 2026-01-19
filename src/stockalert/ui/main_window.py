@@ -14,6 +14,7 @@ from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QCloseEvent, QDesktopServices, QIcon
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QFrame,
     QHBoxLayout,
@@ -302,16 +303,50 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(widget)
         layout.setSpacing(20)
 
-        # Title
+        # Title and button row
+        header_layout = QHBoxLayout()
+
         title = QLabel(_("tickers.title"))
         title.setObjectName("sectionTitle")
-        layout.addWidget(title)
+        header_layout.addWidget(title)
 
-        # Ticker table
+        header_layout.addStretch()
+
+        # Buttons at top right
+        self.add_button = QPushButton(_("tickers.add"))
+        self.add_button.setObjectName("primaryButton")
+        self.add_button.clicked.connect(self._on_add_ticker)
+        header_layout.addWidget(self.add_button)
+
+        self.edit_button = QPushButton(_("tickers.edit"))
+        self.edit_button.setObjectName("secondaryButton")
+        self.edit_button.clicked.connect(self._on_edit_ticker)
+        header_layout.addWidget(self.edit_button)
+
+        self.delete_button = QPushButton(_("tickers.delete"))
+        self.delete_button.setObjectName("dangerButton")
+        self.delete_button.clicked.connect(self._on_delete_ticker)
+        header_layout.addWidget(self.delete_button)
+
+        self.toggle_button = QPushButton(_("tickers.toggle"))
+        self.toggle_button.setObjectName("secondaryButton")
+        self.toggle_button.clicked.connect(self._on_toggle_ticker)
+        header_layout.addWidget(self.toggle_button)
+
+        layout.addLayout(header_layout)
+
+        # Ticker table with checkbox column
         self.ticker_table = QTableWidget()
         self.ticker_table.setObjectName("tickerTable")
-        self.ticker_table.setColumnCount(6)
+        self.ticker_table.setColumnCount(7)
+
+        # Create select all checkbox for header
+        self.select_all_checkbox = QCheckBox()
+        self.select_all_checkbox.setToolTip("Select All")
+        self.select_all_checkbox.stateChanged.connect(self._on_select_all_changed)
+
         self.ticker_table.setHorizontalHeaderLabels([
+            "",  # Checkbox column
             _("tickers.symbol"),
             _("tickers.name"),
             _("tickers.high_threshold"),
@@ -319,50 +354,49 @@ class MainWindow(QMainWindow):
             _("tickers.last_price"),
             _("tickers.enabled"),
         ])
-        self.ticker_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.ticker_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
-        self.ticker_table.setAlternatingRowColors(True)
-        self.ticker_table.setMinimumHeight(300)
 
-        # Make columns stretch
+        # Add select all checkbox to header
         header = self.ticker_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        self.ticker_table.setColumnWidth(0, 40)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.ticker_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.ticker_table.setSelectionMode(QTableWidget.SelectionMode.MultiSelection)
+        self.ticker_table.setAlternatingRowColors(True)
+        self.ticker_table.setMinimumHeight(300)
 
         layout.addWidget(self.ticker_table)
 
-        # Button row
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(15)
-
-        self.add_button = QPushButton(_("tickers.add"))
-        self.add_button.setObjectName("primaryButton")
-        self.add_button.clicked.connect(self._on_add_ticker)
-        button_layout.addWidget(self.add_button)
-
-        self.edit_button = QPushButton(_("tickers.edit"))
-        self.edit_button.setObjectName("secondaryButton")
-        self.edit_button.clicked.connect(self._on_edit_ticker)
-        button_layout.addWidget(self.edit_button)
-
-        self.delete_button = QPushButton(_("tickers.delete"))
-        self.delete_button.setObjectName("dangerButton")
-        self.delete_button.clicked.connect(self._on_delete_ticker)
-        button_layout.addWidget(self.delete_button)
-
-        self.toggle_button = QPushButton(_("tickers.toggle"))
-        self.toggle_button.setObjectName("secondaryButton")
-        self.toggle_button.clicked.connect(self._on_toggle_ticker)
-        button_layout.addWidget(self.toggle_button)
-
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
-
         return widget
+
+    def _on_select_all_changed(self, state: int) -> None:
+        """Handle select all checkbox state change."""
+        is_checked = state == Qt.CheckState.Checked.value
+        for row in range(self.ticker_table.rowCount()):
+            checkbox_widget = self.ticker_table.cellWidget(row, 0)
+            if checkbox_widget:
+                checkbox = checkbox_widget.findChild(QCheckBox)
+                if checkbox:
+                    checkbox.setChecked(is_checked)
+
+    def _get_selected_symbols(self) -> list[str]:
+        """Get all selected ticker symbols (via checkboxes)."""
+        selected = []
+        for row in range(self.ticker_table.rowCount()):
+            checkbox_widget = self.ticker_table.cellWidget(row, 0)
+            if checkbox_widget:
+                checkbox = checkbox_widget.findChild(QCheckBox)
+                if checkbox and checkbox.isChecked():
+                    item = self.ticker_table.item(row, 1)
+                    if item:
+                        selected.append(item.text())
+        return selected
 
     def _create_help_tab(self) -> QWidget:
         """Create the help tab with instructions and tips."""
@@ -437,14 +471,16 @@ class MainWindow(QMainWindow):
             self.setStyleSheet(themed_style)
 
     def _get_dark_theme(self) -> str:
-        """Get dark theme stylesheet using CushLabs brand colors."""
+        """Get dark theme stylesheet using CushLabs brand colors and Segoe UI Variable."""
         return """
 /* AI StockAlert - Dark Theme (CushLabs Brand) */
 /* Primary: #FF6A3D (Cush Orange) */
 /* Grays: 900=#0A0A0A, 800=#141414, 700=#1A1A1A, 600=#2A2A2A, 400=#666666, 300=#888888, 200=#AAAAAA */
+/* Typography: Segoe UI Variable (Native Windows) */
 
 * {
-    font-family: "Source Serif 4", "Georgia", serif;
+    font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+    font-size: 14px;
 }
 
 QMainWindow, QWidget {
@@ -452,9 +488,16 @@ QMainWindow, QWidget {
     color: #AAAAAA;
 }
 
-/* Headings use Space Grotesk */
-#headerLogo, #sectionTitle, QGroupBox::title, #mainTabs QTabBar::tab {
-    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+/* Display/Hero text uses Segoe UI Variable Display with Bold weight */
+#headerLogo {
+    font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif;
+    font-weight: 700;
+}
+
+/* Section Headers use Semibold weight */
+#sectionTitle, QGroupBox::title, #mainTabs QTabBar::tab {
+    font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif;
+    font-weight: 600;
 }
 
 /* Header */
@@ -464,19 +507,19 @@ QMainWindow, QWidget {
 }
 
 #headerLogo {
-    font-size: 24px;
-    font-weight: bold;
+    font-size: 32px;
+    font-weight: 700;
     color: #FF6A3D;
     background-color: transparent;
 }
 
 #headerLabel {
-    font-size: 14px;
+    font-size: 13px;
     color: #666666;
     background-color: transparent;
 }
 
-#headerInner, #footerInner {
+#headerInner {
     background-color: transparent;
 }
 
@@ -529,15 +572,20 @@ QMainWindow, QWidget {
     border-top: 1px solid #2A2A2A;
 }
 
+#footerInner {
+    background-color: transparent;
+}
+
 #footerText {
     font-size: 13px;
-    color: #666666;
+    color: #FF6A3D;
+    background-color: transparent;
 }
 
 #footerLink {
     font-size: 13px;
     color: #FF6A3D;
-    background: transparent;
+    background-color: transparent;
     border: none;
     padding: 5px 10px;
 }
@@ -545,11 +593,13 @@ QMainWindow, QWidget {
 #footerLink:hover {
     color: #FF8A5D;
     text-decoration: underline;
+    background-color: transparent;
 }
 
 #footerSeparator {
-    color: #2A2A2A;
+    color: #FF6A3D;
     margin: 0 5px;
+    background-color: transparent;
 }
 
 /* Content Area */
@@ -599,15 +649,15 @@ QMainWindow, QWidget {
 
 /* Section Titles */
 #sectionTitle {
-    font-size: 22px;
-    font-weight: bold;
+    font-size: 24px;
+    font-weight: 600;
     color: #FFFFFF;
     margin-bottom: 10px;
 }
 
 #helpSectionTitle {
-    font-size: 18px;
-    font-weight: bold;
+    font-size: 20px;
+    font-weight: 600;
     color: #FF6A3D;
     margin-top: 16px;
     margin-bottom: 8px;
@@ -615,6 +665,7 @@ QMainWindow, QWidget {
 
 #helpContent {
     font-size: 14px;
+    font-weight: 400;
     color: #AAAAAA;
     line-height: 1.6;
     padding-left: 8px;
@@ -704,16 +755,18 @@ QMainWindow, QWidget {
     border-color: #f4212e;
 }
 
-/* Help Labels */
+/* Captions/Labels - 12px muted grey */
 #helpLabel {
     color: #666666;
-    font-size: 12px;
+    font-size: 13px;
+    font-weight: 400;
     margin-bottom: 12px;
 }
 
-/* Form Elements */
+/* Form Elements - Body text 14-16px */
 QLabel {
-    font-size: 15px;
+    font-size: 14px;
+    font-weight: 400;
     color: #AAAAAA;
 }
 
@@ -722,7 +775,8 @@ QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox {
     border: 1px solid #2A2A2A;
     border-radius: 6px;
     padding: 12px 14px;
-    font-size: 15px;
+    font-size: 14px;
+    font-weight: 400;
     color: #AAAAAA;
     margin-bottom: 8px;
 }
@@ -864,46 +918,54 @@ QDialog {
 """
 
     def _get_light_theme(self) -> str:
-        """Get light theme stylesheet using CushLabs brand colors."""
+        """Get light theme stylesheet using CushLabs brand colors and Segoe UI Variable."""
         return """
 /* AI StockAlert - Light Theme (CushLabs Brand) */
 /* Primary: #FF6A3D (Cush Orange) */
-/* Light backgrounds with dark text */
+/* Typography: Segoe UI Variable (Native Windows) */
 
 * {
-    font-family: "Source Serif 4", "Georgia", serif;
+    font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+    font-size: 14px;
 }
 
 QMainWindow, QWidget {
-    background-color: #FFFFFF;
+    background-color: #FAF8F5;
     color: #000000;
 }
 
-/* Headings use Space Grotesk */
-#headerLogo, #sectionTitle, QGroupBox::title, #mainTabs QTabBar::tab {
-    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+/* Display/Hero text uses Segoe UI Variable Display with Bold weight */
+#headerLogo {
+    font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif;
+    font-weight: 700;
+}
+
+/* Section Headers use Semibold weight */
+#sectionTitle, QGroupBox::title, #mainTabs QTabBar::tab {
+    font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif;
+    font-weight: 600;
 }
 
 /* Header */
 #header {
-    background-color: #FAFAFA;
+    background-color: #F5F3EE;
     border-bottom: 1px solid #E5E5E5;
 }
 
 #headerLogo {
-    font-size: 24px;
-    font-weight: bold;
+    font-size: 32px;
+    font-weight: 700;
     color: #FF6A3D;
     background-color: transparent;
 }
 
 #headerLabel {
-    font-size: 14px;
+    font-size: 13px;
     color: #666666;
     background-color: transparent;
 }
 
-#headerInner, #footerInner {
+#headerInner {
     background-color: transparent;
 }
 
@@ -952,19 +1014,24 @@ QMainWindow, QWidget {
 
 /* Footer */
 #footer {
-    background-color: #FAFAFA;
-    border-top: 1px solid #E5E5E5;
+    background-color: #F5F3EE;
+    border-top: 1px solid #E8E4DD;
+}
+
+#footerInner {
+    background-color: transparent;
 }
 
 #footerText {
     font-size: 13px;
-    color: #666666;
+    color: #FF6A3D;
+    background-color: transparent;
 }
 
 #footerLink {
     font-size: 13px;
     color: #FF6A3D;
-    background: transparent;
+    background-color: transparent;
     border: none;
     padding: 5px 10px;
 }
@@ -972,21 +1039,23 @@ QMainWindow, QWidget {
 #footerLink:hover {
     color: #E55A2D;
     text-decoration: underline;
+    background-color: transparent;
 }
 
 #footerSeparator {
-    color: #CCCCCC;
+    color: #FF6A3D;
     margin: 0 5px;
+    background-color: transparent;
 }
 
-/* Content Area */
+/* Content Area - Light sand background */
 #contentScrollArea {
-    background-color: #FFFFFF;
+    background-color: #FAF8F5;
     border: none;
 }
 
 #contentContainer {
-    background-color: #FFFFFF;
+    background-color: #FAF8F5;
 }
 
 #innerContent {
@@ -999,7 +1068,7 @@ QMainWindow, QWidget {
 }
 
 #mainTabs::pane {
-    border: 1px solid #E5E5E5;
+    border: 1px solid #E8E4DD;
     background-color: #FFFFFF;
     border-radius: 8px;
     padding: 20px;
@@ -1026,15 +1095,15 @@ QMainWindow, QWidget {
 
 /* Section Titles */
 #sectionTitle {
-    font-size: 22px;
-    font-weight: bold;
+    font-size: 24px;
+    font-weight: 600;
     color: #000000;
     margin-bottom: 10px;
 }
 
 #helpSectionTitle {
-    font-size: 18px;
-    font-weight: bold;
+    font-size: 20px;
+    font-weight: 600;
     color: #FF6A3D;
     margin-top: 16px;
     margin-bottom: 8px;
@@ -1042,6 +1111,7 @@ QMainWindow, QWidget {
 
 #helpContent {
     font-size: 14px;
+    font-weight: 400;
     color: #333333;
     line-height: 1.6;
     padding-left: 8px;
@@ -1130,16 +1200,18 @@ QMainWindow, QWidget {
     border-color: #DC2626;
 }
 
-/* Help Labels */
+/* Captions/Labels - 12px muted grey */
 #helpLabel {
     color: #666666;
-    font-size: 12px;
+    font-size: 13px;
+    font-weight: 400;
     margin-bottom: 12px;
 }
 
-/* Form Elements */
+/* Form Elements - Body text 14-16px */
 QLabel {
-    font-size: 15px;
+    font-size: 14px;
+    font-weight: 400;
     color: #000000;
 }
 
@@ -1330,43 +1402,55 @@ QDialog {
         tickers = self.config_manager.get_tickers()
         self.ticker_table.setRowCount(len(tickers))
 
+        # Reset select all checkbox
+        self.select_all_checkbox.setChecked(False)
+
         for row, ticker in enumerate(tickers):
+            # Checkbox column
+            checkbox_widget = QWidget()
+            checkbox_layout = QHBoxLayout(checkbox_widget)
+            checkbox_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            checkbox_layout.setContentsMargins(0, 0, 0, 0)
+            checkbox = QCheckBox()
+            checkbox_layout.addWidget(checkbox)
+            self.ticker_table.setCellWidget(row, 0, checkbox_widget)
+
             # Symbol
             symbol_item = QTableWidgetItem(ticker.get("symbol", ""))
             symbol_item.setFlags(symbol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.ticker_table.setItem(row, 0, symbol_item)
+            self.ticker_table.setItem(row, 1, symbol_item)
 
             # Name
             name_item = QTableWidgetItem(ticker.get("name", ""))
             name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.ticker_table.setItem(row, 1, name_item)
+            self.ticker_table.setItem(row, 2, name_item)
 
             # High threshold
             high = ticker.get("high_threshold", 0)
             high_item = QTableWidgetItem(f"${high:.2f}")
             high_item.setFlags(high_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             high_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.ticker_table.setItem(row, 2, high_item)
+            self.ticker_table.setItem(row, 3, high_item)
 
             # Low threshold
             low = ticker.get("low_threshold", 0)
             low_item = QTableWidgetItem(f"${low:.2f}")
             low_item.setFlags(low_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             low_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.ticker_table.setItem(row, 3, low_item)
+            self.ticker_table.setItem(row, 4, low_item)
 
             # Last price (placeholder)
             price_item = QTableWidgetItem("--")
             price_item.setFlags(price_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             price_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.ticker_table.setItem(row, 4, price_item)
+            self.ticker_table.setItem(row, 5, price_item)
 
             # Enabled
             enabled = ticker.get("enabled", True)
             enabled_item = QTableWidgetItem("✓" if enabled else "✗")
             enabled_item.setFlags(enabled_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             enabled_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.ticker_table.setItem(row, 5, enabled_item)
+            self.ticker_table.setItem(row, 6, enabled_item)
 
     def _get_selected_row(self) -> int:
         """Get the currently selected row index, or -1 if none."""
@@ -1379,7 +1463,7 @@ QDialog {
         """Get the symbol of the selected row."""
         row = self._get_selected_row()
         if row >= 0:
-            item = self.ticker_table.item(row, 0)
+            item = self.ticker_table.item(row, 1)  # Column 1 is now symbol
             if item:
                 return item.text()
         return None
@@ -1497,6 +1581,7 @@ QDialog {
 
         # Update ticker table headers
         self.ticker_table.setHorizontalHeaderLabels([
+            "",  # Checkbox column
             _("tickers.symbol"),
             _("tickers.name"),
             _("tickers.high_threshold"),
@@ -1519,9 +1604,9 @@ QDialog {
             price: Current price, or None if unavailable
         """
         for row in range(self.ticker_table.rowCount()):
-            item = self.ticker_table.item(row, 0)
+            item = self.ticker_table.item(row, 1)  # Column 1 is now symbol
             if item and item.text() == symbol:
-                price_item = self.ticker_table.item(row, 4)
+                price_item = self.ticker_table.item(row, 5)  # Column 5 is now last price
                 if price_item:
                     if price is not None:
                         price_item.setText(f"${price:.2f}")
