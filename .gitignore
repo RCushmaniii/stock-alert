@@ -32,14 +32,33 @@ ENV/
 *.swp
 *.swo
 *~
+.windsurf/
 
 # Logs
 logs/
 *.log
+stockalert.log
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Project specific
+# Project specific - Configuration
 config.json
+.env
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Pre-commit
+.pre-commit-cache/
+
+# Secrets baseline
+.secrets.baseline
+
+# Build artifacts
+*.msi
+*.exe

@@ -1,0 +1,192 @@
+{
+  "app": {
+    "name": "StockAlert",
+    "version": "3.0.0",
+    "description": "Monitoreo de precios de acciones con notificaciones de Windows"
+  },
+  "languages": {
+    "en": "English",
+    "es": "Español"
+  },
+  "header": {
+    "title": "StockAlert"
+  },
+  "footer": {
+    "copyright": "© 2026 CushLabs.ai. Todos los Derechos Reservados.",
+    "website": "Sitio Web",
+    "privacy": "Política de Privacidad",
+    "terms": "Términos de Servicio"
+  },
+  "theme": {
+    "label": "Tema",
+    "dark": "Oscuro",
+    "light": "Claro"
+  },
+  "tabs": {
+    "profile": "Perfil",
+    "settings": "Configuración",
+    "tickers": "Acciones",
+    "help": "Ayuda",
+    "about": "Acerca de"
+  },
+  "profile": {
+    "title": "Tu Perfil",
+    "name": "Nombre Completo",
+    "name_placeholder": "Ingresa tu nombre completo",
+    "name_help": "Usado para notificaciones personalizadas",
+    "email": "Correo Electrónico",
+    "email_placeholder": "tu@correo.com",
+    "email_help": "Requerido para alertas por correo",
+    "cell": "Teléfono Celular",
+    "cell_placeholder": "+52 (555) 123-4567",
+    "cell_help": "Requerido para alertas de WhatsApp (incluir código de país)",
+    "save": "Guardar Perfil",
+    "saved": "¡Perfil guardado exitosamente!",
+    "save_error": "Error al guardar el perfil"
+  },
+  "help": {
+    "title": "Ayuda y Consejos",
+    "getting_started": "Primeros Pasos",
+    "getting_started_content": "AI StockAlert monitorea tus acciones seleccionadas en tiempo real y envía notificaciones de Windows cuando los precios cruzan tus umbrales definidos.\n\n1. Agrega acciones para monitorear en la pestaña Acciones\n2. Establece umbrales de precio alto y bajo para cada acción\n3. La app funciona en segundo plano y te alerta cuando los precios se activan",
+    "settings_tips": "Consejos de Configuración",
+    "settings_tips_content": "• Intervalo de Verificación: Con qué frecuencia la app obtiene nuevos precios. Valores más bajos significan actualizaciones más frecuentes pero usan más llamadas API. Recomendado: 1-5 minutos para trading activo, 15-30 minutos para monitoreo casual.\n\n• Período de Enfriamiento: Previene alertas repetidas para la misma acción. Después de que se activa una alerta, no recibirás otra para esa acción hasta que expire el enfriamiento. Recomendado: 5-15 minutos.\n\n• Notificaciones: Habilita notificaciones toast de Windows para alertas de precio. Desactiva si solo quieres monitorear precios en la app.",
+    "tickers_title": "Gestión de Acciones",
+    "tickers_content": "• Agregar Acción: Ingresa el símbolo de la acción (ej., AAPL, MSFT, GOOGL) y establece tus umbrales de precio.\n\n• Umbral Alto: Serás alertado cuando el precio suba POR ENCIMA de este valor.\n\n• Umbral Bajo: Serás alertado cuando el precio caiga POR DEBAJO de este valor.\n\n• Alternar Habilitado: Desactiva temporalmente el monitoreo de una acción sin eliminarla.",
+    "alerts_title": "Entendiendo las Alertas",
+    "alerts_content": "• Las alertas aparecen como notificaciones de Windows cuando una acción cruza tu umbral.\n\n• Haz clic en la notificación para abrir un gráfico de precios de esa acción.\n\n• La app respeta el horario del mercado - sin alertas durante fines de semana o feriados.\n\n• Modo Demo: Si no hay clave API configurada, la app usa datos simulados para pruebas."
+  },
+  "settings": {
+    "title": "Configuración de Monitoreo",
+    "check_interval": "Intervalo de Verificación",
+    "check_interval_help": "Con qué frecuencia verificar los precios de las acciones",
+    "cooldown": "Período de Enfriamiento (segundos)",
+    "cooldown_help": "Tiempo entre alertas repetidas para la misma acción",
+    "alerts_title": "Canales de Alerta",
+    "alerts_windows": "Notificaciones de Windows",
+    "alerts_windows_audio": "Reproducir sonido con la notificación",
+    "alerts_email": "Alertas por Correo",
+    "alerts_email_help": "Requiere correo electrónico en la pestaña Perfil",
+    "alerts_whatsapp": "Alertas de WhatsApp",
+    "alerts_whatsapp_help": "Requiere teléfono celular en la pestaña Perfil",
+    "language_title": "Idioma",
+    "language": "Idioma de la Aplicación",
+    "language_help": "Idioma de visualización de la aplicación",
+    "api_provider": "Proveedor de Datos",
+    "api_provider_help": "Fuente de datos de acciones",
+    "save": "Guardar Configuración",
+    "saved": "¡Configuración guardada exitosamente!",
+    "save_error": "Error al guardar la configuración"
+  },
+  "tickers": {
+    "title": "Acciones",
+    "add": "Agregar Acción",
+    "edit": "Editar Acción",
+    "delete": "Eliminar Acción",
+    "toggle": "Alternar Estado",
+    "symbol": "Símbolo",
+    "name": "Nombre",
+    "high_threshold": "Umbral Alto",
+    "low_threshold": "Umbral Bajo",
+    "enabled": "Habilitado",
+    "last_price": "Último Precio",
+    "validate": "Validar",
+    "validating": "Validando...",
+    "valid_symbol": "Símbolo válido",
+    "invalid_symbol": "Símbolo inválido",
+    "duplicate_symbol": "La acción {symbol} ya existe",
+    "add_success": "¡Acción agregada exitosamente!",
+    "edit_success": "¡Acción actualizada exitosamente!",
+    "delete_confirm": "¿Eliminar la acción {symbol}?",
+    "delete_success": "¡Acción eliminada exitosamente!",
+    "no_selection": "Por favor seleccione una acción primero"
+  },
+  "alerts": {
+    "high": {
+      "title": "Alerta Alta de {symbol}",
+      "message": "{name} alcanzó ${price:.2f} (umbral: ${threshold:.2f})"
+    },
+    "low": {
+      "title": "Alerta Baja de {symbol}",
+      "message": "{name} bajó a ${price:.2f} (umbral: ${threshold:.2f})"
+    },
+    "view_chart": "Ver Gráfico",
+    "started": {
+      "title": "StockAlert Iniciado",
+      "message": "Monitoreando {count} acciones\n{status}"
+    },
+    "config_reloaded": {
+      "title": "Configuración Recargada",
+      "message": "Ahora monitoreando {count} acciones"
+    },
+    "config_error": {
+      "title": "Error de Configuración",
+      "message": "Error al recargar: {error}"
+    }
+  },
+  "market": {
+    "open": "El mercado está ABIERTO (cierra a las {time} ET)",
+    "closed_weekend": "El mercado está CERRADO (fin de semana)",
+    "closed_holiday": "El mercado está CERRADO (feriado)",
+    "closed_after_hours": "El mercado está CERRADO (fuera de horario)",
+    "opens_at": "El mercado abre a las {time} ET",
+    "unknown": "Estado del mercado desconocido"
+  },
+  "tray": {
+    "title": "StockAlert - Monitor de Horario de Mercado",
+    "menu": {
+      "show": "Mostrar Ventana",
+      "hide": "Ocultar Ventana",
+      "monitoring": "Monitoreando: {count} acciones",
+      "market_status": "Mercado: {status}",
+      "start_monitoring": "Iniciar Monitoreo",
+      "stop_monitoring": "Detener Monitoreo",
+      "open_config": "Abrir Configuración",
+      "reload_config": "Recargar Configuración",
+      "exit": "Salir"
+    },
+    "tooltip": {
+      "monitoring": "Monitoreando {count} acciones",
+      "paused": "Monitoreo en pausa"
+    }
+  },
+  "dialogs": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "confirm": "Confirmar",
+    "yes": "Sí",
+    "no": "No",
+    "ok": "Aceptar",
+    "apply": "Aplicar"
+  },
+  "errors": {
+    "title": "Error",
+    "invalid_input": "Valores de entrada inválidos",
+    "symbol_required": "El símbolo es requerido",
+    "threshold_positive": "Los umbrales deben ser números positivos",
+    "high_greater_low": "El umbral alto debe ser mayor que el umbral bajo",
+    "api_error": "Error de API: {message}",
+    "config_load_error": "Error al cargar la configuración",
+    "no_api_key": "Clave de API de Finnhub no configurada",
+    "rate_limit": "Límite de velocidad excedido. Por favor espere."
+  },
+  "validation": {
+    "errors_title": "Errores de Validación"
+  },
+  "about": {
+    "title": "Acerca de StockAlert",
+    "version": "Versión {version}",
+    "description": "Monitoreo de precios de acciones de grado comercial para Windows",
+    "author": "Creado por Robert Cushman",
+    "company": "RC Software",
+    "copyright": "© 2026 CushLabs.ai. Todos los Derechos Reservados.",
+    "finnhub_attribution": "Datos de acciones proporcionados por Finnhub"
+  },
+  "status": {
+    "ready": "Listo",
+    "monitoring": "Monitoreando {count} acciones",
+    "paused": "En Pausa",
+    "error": "Error: {message}",
+    "rate_limit": "Limitado - esperando"
+  }
+}

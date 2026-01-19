@@ -1,22 +1,28 @@
 {
+  "version": "3.0.0",
   "settings": {
     "check_interval": 60,
     "cooldown": 300,
-    "notifications_enabled": true
+    "notifications_enabled": true,
+    "language": "en",
+    "api": {
+      "provider": "finnhub",
+      "rate_limit": 60
+    }
   },
   "tickers": [
     {
       "symbol": "AAPL",
       "name": "Apple Inc.",
-      "high_threshold": 190.0,
-      "low_threshold": 180.0,
+      "high_threshold": 200.0,
+      "low_threshold": 150.0,
       "enabled": true
     },
     {
       "symbol": "MSFT",
       "name": "Microsoft Corp.",
-      "high_threshold": 410.0,
-      "low_threshold": 375.0,
+      "high_threshold": 450.0,
+      "low_threshold": 350.0,
       "enabled": true
     }
   ]

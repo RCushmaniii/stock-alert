@@ -1,8 +1,23 @@
-yfinance==0.2.38
-winotify==1.1.0
-requests==2.31.0
-pillow==10.0.0
-FreeSimpleGUI>=5.0.0
+# StockAlert v3.0 Runtime Dependencies
+# Install: pip install -r requirements.txt
+
+# GUI Framework
+PyQt6>=6.6.0
+
+# Stock Data API
+finnhub-python>=2.4.0
+
+# Environment Variables
+python-dotenv>=1.0.0
+
+# Windows Notifications
+winotify>=1.1.0
+
+# Timezone Handling
 pytz>=2024.1
-pystray>=0.19.5
+
+# Image Processing (for icons)
 Pillow>=10.0.0
+
+# HTTP Client
+requests>=2.31.0

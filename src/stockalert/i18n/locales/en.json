@@ -1,0 +1,192 @@
+{
+  "app": {
+    "name": "StockAlert",
+    "version": "3.0.0",
+    "description": "Stock price monitoring with Windows notifications"
+  },
+  "languages": {
+    "en": "English",
+    "es": "Español"
+  },
+  "header": {
+    "title": "StockAlert"
+  },
+  "footer": {
+    "copyright": "© 2026 CushLabs.ai. All Rights Reserved.",
+    "website": "Website",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service"
+  },
+  "theme": {
+    "label": "Theme",
+    "dark": "Dark",
+    "light": "Light"
+  },
+  "tabs": {
+    "profile": "Profile",
+    "settings": "Settings",
+    "tickers": "Tickers",
+    "help": "Help",
+    "about": "About"
+  },
+  "profile": {
+    "title": "Your Profile",
+    "name": "Full Name",
+    "name_placeholder": "Enter your full name",
+    "name_help": "Used for personalized notifications",
+    "email": "Email Address",
+    "email_placeholder": "your@email.com",
+    "email_help": "Required for email alerts",
+    "cell": "Cell Phone",
+    "cell_placeholder": "+1 (555) 123-4567",
+    "cell_help": "Required for WhatsApp alerts (include country code)",
+    "save": "Save Profile",
+    "saved": "Profile saved successfully!",
+    "save_error": "Failed to save profile"
+  },
+  "help": {
+    "title": "Help & Tips",
+    "getting_started": "Getting Started",
+    "getting_started_content": "AI StockAlert monitors your selected stocks in real-time and sends Windows notifications when prices cross your defined thresholds.\n\n1. Add stocks to monitor in the Tickers tab\n2. Set high and low price thresholds for each stock\n3. The app runs in the background and alerts you when prices trigger",
+    "settings_tips": "Settings Tips",
+    "settings_tips_content": "• Check Interval: How often the app fetches new prices. Lower values mean more frequent updates but use more API calls. Recommended: 1-5 minutes for active trading, 15-30 minutes for casual monitoring.\n\n• Cooldown Period: Prevents repeated alerts for the same stock. After an alert fires, you won't get another for that stock until the cooldown expires. Recommended: 5-15 minutes.\n\n• Notifications: Enable Windows toast notifications for price alerts. Disable if you only want to monitor prices in the app.",
+    "tickers_title": "Managing Tickers",
+    "tickers_content": "• Add Ticker: Enter the stock symbol (e.g., AAPL, MSFT, GOOGL) and set your price thresholds.\n\n• High Threshold: You'll be alerted when the price rises ABOVE this value.\n\n• Low Threshold: You'll be alerted when the price falls BELOW this value.\n\n• Toggle Enabled: Temporarily disable monitoring for a stock without deleting it.",
+    "alerts_title": "Understanding Alerts",
+    "alerts_content": "• Alerts appear as Windows notifications when a stock crosses your threshold.\n\n• Click the notification to open a price chart for that stock.\n\n• The app respects market hours - no alerts during weekends or holidays.\n\n• Demo Mode: If no API key is configured, the app uses simulated data for testing."
+  },
+  "settings": {
+    "title": "Monitoring Settings",
+    "check_interval": "Check Interval",
+    "check_interval_help": "How often to check stock prices",
+    "cooldown": "Cooldown Period (seconds)",
+    "cooldown_help": "Time between repeated alerts for the same stock",
+    "alerts_title": "Alert Channels",
+    "alerts_windows": "Windows Notifications",
+    "alerts_windows_audio": "Play sound with notification",
+    "alerts_email": "Email Alerts",
+    "alerts_email_help": "Requires email address in Profile tab",
+    "alerts_whatsapp": "WhatsApp Alerts",
+    "alerts_whatsapp_help": "Requires cell phone in Profile tab",
+    "language_title": "Language",
+    "language": "Display Language",
+    "language_help": "Application display language",
+    "api_provider": "Data Provider",
+    "api_provider_help": "Stock data source",
+    "save": "Save Settings",
+    "saved": "Settings saved successfully!",
+    "save_error": "Failed to save settings"
+  },
+  "tickers": {
+    "title": "Stock Tickers",
+    "add": "Add Ticker",
+    "edit": "Edit Ticker",
+    "delete": "Delete Ticker",
+    "toggle": "Toggle Enabled",
+    "symbol": "Symbol",
+    "name": "Name",
+    "high_threshold": "High Threshold",
+    "low_threshold": "Low Threshold",
+    "enabled": "Enabled",
+    "last_price": "Last Price",
+    "validate": "Validate",
+    "validating": "Validating...",
+    "valid_symbol": "Valid symbol",
+    "invalid_symbol": "Invalid symbol",
+    "duplicate_symbol": "Ticker {symbol} already exists",
+    "add_success": "Ticker added successfully!",
+    "edit_success": "Ticker updated successfully!",
+    "delete_confirm": "Delete ticker {symbol}?",
+    "delete_success": "Ticker deleted successfully!",
+    "no_selection": "Please select a ticker first"
+  },
+  "alerts": {
+    "high": {
+      "title": "{symbol} High Alert",
+      "message": "{name} reached ${price:.2f} (threshold: ${threshold:.2f})"
+    },
+    "low": {
+      "title": "{symbol} Low Alert",
+      "message": "{name} dropped to ${price:.2f} (threshold: ${threshold:.2f})"
+    },
+    "view_chart": "View Chart",
+    "started": {
+      "title": "StockAlert Started",
+      "message": "Monitoring {count} stocks\n{status}"
+    },
+    "config_reloaded": {
+      "title": "Configuration Reloaded",
+      "message": "Now monitoring {count} stocks"
+    },
+    "config_error": {
+      "title": "Configuration Error",
+      "message": "Failed to reload: {error}"
+    }
+  },
+  "market": {
+    "open": "Market is OPEN (closes at {time} ET)",
+    "closed_weekend": "Market is CLOSED (weekend)",
+    "closed_holiday": "Market is CLOSED (holiday)",
+    "closed_after_hours": "Market is CLOSED (after hours)",
+    "opens_at": "Market opens at {time} ET",
+    "unknown": "Market status unknown"
+  },
+  "tray": {
+    "title": "StockAlert - Market Hours Monitor",
+    "menu": {
+      "show": "Show Window",
+      "hide": "Hide Window",
+      "monitoring": "Monitoring: {count} stocks",
+      "market_status": "Market: {status}",
+      "start_monitoring": "Start Monitoring",
+      "stop_monitoring": "Stop Monitoring",
+      "open_config": "Open Configuration",
+      "reload_config": "Reload Config",
+      "exit": "Exit"
+    },
+    "tooltip": {
+      "monitoring": "Monitoring {count} stocks",
+      "paused": "Monitoring paused"
+    }
+  },
+  "dialogs": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "confirm": "Confirm",
+    "yes": "Yes",
+    "no": "No",
+    "ok": "OK",
+    "apply": "Apply"
+  },
+  "errors": {
+    "title": "Error",
+    "invalid_input": "Invalid input values",
+    "symbol_required": "Symbol is required",
+    "threshold_positive": "Thresholds must be positive numbers",
+    "high_greater_low": "High threshold must be greater than low threshold",
+    "api_error": "API error: {message}",
+    "config_load_error": "Failed to load configuration",
+    "no_api_key": "Finnhub API key not configured",
+    "rate_limit": "Rate limit exceeded. Please wait."
+  },
+  "validation": {
+    "errors_title": "Validation Errors"
+  },
+  "about": {
+    "title": "About StockAlert",
+    "version": "Version {version}",
+    "description": "Commercial-grade stock price monitoring for Windows",
+    "author": "Created by Robert Cushman",
+    "company": "RC Software",
+    "copyright": "© 2026 CushLabs.ai. All Rights Reserved.",
+    "finnhub_attribution": "Stock data provided by Finnhub"
+  },
+  "status": {
+    "ready": "Ready",
+    "monitoring": "Monitoring {count} stocks",
+    "paused": "Paused",
+    "error": "Error: {message}",
+    "rate_limit": "Rate limited - waiting"
+  }
+}
