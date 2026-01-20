@@ -329,14 +329,24 @@ def start_background_process() -> int:
         if getattr(sys, "frozen", False):
             # Running as compiled exe
             cmd = [_get_service_script()]
+            cwd = None
+            env = None
         else:
-            # Running from source
+            # Running from source - use module invocation for correct imports
             python_exe = _get_python_executable()
             pythonw_exe = python_exe.replace("python.exe", "pythonw.exe")
             if not Path(pythonw_exe).exists():
                 pythonw_exe = python_exe
-            service_script = _get_service_script()
-            cmd = [pythonw_exe, service_script]
+
+            # Run as module: python -m stockalert.service
+            cmd = [pythonw_exe, "-m", "stockalert.service"]
+
+            # Set working directory to src folder for correct module resolution
+            src_dir = Path(__file__).resolve().parent.parent.parent
+            cwd = str(src_dir)
+
+            # Copy environment and ensure PYTHONPATH includes src
+            env = os.environ.copy()
 
         # Start the process detached from this console
         if sys.platform == "win32":
@@ -344,12 +354,16 @@ def start_background_process() -> int:
             CREATE_NO_WINDOW = 0x08000000
             process = subprocess.Popen(
                 cmd,
+                cwd=cwd,
+                env=env,
                 creationflags=CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS,
                 start_new_session=True,
             )
         else:
             process = subprocess.Popen(
                 cmd,
+                cwd=cwd,
+                env=env,
                 start_new_session=True,
             )
 

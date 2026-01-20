@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 
-from stockalert.core.alert_manager import AlertManager
+from stockalert.core.alert_manager import AlertManager, AlertSettings
 from stockalert.core.config import ConfigManager
 from stockalert.core.monitor import StockMonitor
 from stockalert.i18n.translator import Translator, set_translator
@@ -118,9 +118,27 @@ class StockAlertApp:
         provider = self._setup_api_provider()
 
         icon_path = self.app_dir / "stock_alert.ico"
+        alert_settings = self._load_alert_settings()
         self.alert_manager = AlertManager(
             icon_path=icon_path if icon_path.exists() else None,
             translator=self.translator,
+            settings=alert_settings,
+        )
+
+    def _load_alert_settings(self) -> AlertSettings:
+        """Load alert settings from configuration."""
+        settings = self.config_manager.settings
+        alerts_config = settings.get("alerts", {})
+        profile = self.config_manager.get("profile", {})
+
+        return AlertSettings(
+            windows_enabled=alerts_config.get("windows_enabled", True),
+            windows_audio=alerts_config.get("windows_audio", True),
+            sms_enabled=alerts_config.get("sms_enabled", False),
+            whatsapp_enabled=alerts_config.get("whatsapp_enabled", False),
+            email_enabled=alerts_config.get("email_enabled", False),
+            phone_number=profile.get("cell", ""),
+            email_address=profile.get("email", ""),
         )
 
         self.monitor = StockMonitor(
@@ -161,6 +179,11 @@ class StockAlertApp:
                 self.main_window.retranslate_ui()
             if self.tray_icon:
                 self.tray_icon.update_menu()
+
+        # Update alert settings
+        if self.alert_manager:
+            new_settings = self._load_alert_settings()
+            self.alert_manager.update_settings(new_settings)
 
         # Restart monitoring with new settings
         if self._is_monitoring and self.monitor:

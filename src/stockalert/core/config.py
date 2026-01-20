@@ -25,10 +25,23 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "cooldown": 300,
         "notifications_enabled": True,
         "language": "en",
+        "service_mode": "background",  # Default to background service
+        "alerts": {
+            "windows_enabled": True,
+            "windows_audio": True,
+            "sms_enabled": False,
+            "whatsapp_enabled": False,
+            "email_enabled": False,
+        },
         "api": {
             "provider": "finnhub",
             "rate_limit": 60,
         },
+    },
+    "profile": {
+        "name": "",
+        "email": "",
+        "cell": "",
     },
     "tickers": [],
 }

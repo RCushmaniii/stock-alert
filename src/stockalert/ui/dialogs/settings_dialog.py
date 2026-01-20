@@ -248,16 +248,16 @@ class SettingsWidget(QWidget):
         btn_layout.setSpacing(12)
 
         self.service_start_btn = QPushButton(_("settings.service_start"))
+        self.service_start_btn.setObjectName("actionButton")
+        self.service_start_btn.setToolTip(_("settings.service_start_help"))
         self.service_start_btn.clicked.connect(self._on_service_start)
         btn_layout.addWidget(self.service_start_btn)
 
         self.service_stop_btn = QPushButton(_("settings.service_stop"))
+        self.service_stop_btn.setObjectName("actionButton")
+        self.service_stop_btn.setToolTip(_("settings.service_stop_help"))
         self.service_stop_btn.clicked.connect(self._on_service_stop)
         btn_layout.addWidget(self.service_stop_btn)
-
-        self.service_restart_btn = QPushButton(_("settings.service_restart"))
-        self.service_restart_btn.clicked.connect(self._on_service_restart)
-        btn_layout.addWidget(self.service_restart_btn)
 
         btn_layout.addStretch()
         service_layout.addRow("", btn_container)
@@ -412,8 +412,9 @@ class SettingsWidget(QWidget):
         self.mode_background_radio.setText(_("settings.mode_background"))
         self.mode_background_radio.setToolTip(_("settings.mode_background_help"))
         self.service_start_btn.setText(_("settings.service_start"))
+        self.service_start_btn.setToolTip(_("settings.service_start_help"))
         self.service_stop_btn.setText(_("settings.service_stop"))
-        self.service_restart_btn.setText(_("settings.service_restart"))
+        self.service_stop_btn.setToolTip(_("settings.service_stop_help"))
 
     def _on_service_status_changed(self, state) -> None:
         """Handle service status change callback."""
@@ -426,22 +427,19 @@ class SettingsWidget(QWidget):
 
         self.service_status_value.setText(status_text)
 
-        # Update status color
+        # Update status color and button states
         if state.status == ServiceStatus.RUNNING:
             self.service_status_value.setStyleSheet("color: green; font-weight: bold;")
             self.service_start_btn.setEnabled(False)
             self.service_stop_btn.setEnabled(True)
-            self.service_restart_btn.setEnabled(True)
         elif state.status == ServiceStatus.STOPPED:
             self.service_status_value.setStyleSheet("color: gray;")
             self.service_start_btn.setEnabled(True)
             self.service_stop_btn.setEnabled(False)
-            self.service_restart_btn.setEnabled(False)
         else:
             self.service_status_value.setStyleSheet("color: orange;")
             self.service_start_btn.setEnabled(False)
             self.service_stop_btn.setEnabled(False)
-            self.service_restart_btn.setEnabled(False)
 
     def _on_service_start(self) -> None:
         """Handle service start button click."""
@@ -481,23 +479,6 @@ class SettingsWidget(QWidget):
 
         if success:
             self.status_label.setText(_("settings.service_stopped"))
-            self.status_label.setStyleSheet("color: green;")
-        else:
-            self.status_label.setText(message)
-            self.status_label.setStyleSheet("color: red;")
-
-        self._update_service_status()
-
-    def _on_service_restart(self) -> None:
-        """Handle service restart button click."""
-        self.service_restart_btn.setEnabled(False)
-        self.status_label.setText(_("settings.service_restarting"))
-        self.status_label.setStyleSheet("color: blue;")
-
-        success, message = self.service_controller.restart()
-
-        if success:
-            self.status_label.setText(_("settings.service_restarted"))
             self.status_label.setStyleSheet("color: green;")
         else:
             self.status_label.setText(message)

@@ -104,7 +104,7 @@ class StockAlertService:
         """Set up the alert manager with current settings."""
         settings = self.config_manager.settings
         alerts_config = settings.get("alerts", {})
-        profile = self.config_manager.config.get("profile", {})
+        profile = self.config_manager.get("profile", {})
 
         alert_settings = AlertSettings(
             windows_enabled=alerts_config.get("windows_enabled", True),
@@ -165,7 +165,7 @@ class StockAlertService:
         if self.alert_manager:
             settings = self.config_manager.settings
             alerts_config = settings.get("alerts", {})
-            profile = self.config_manager.config.get("profile", {})
+            profile = self.config_manager.get("profile", {})
 
             new_settings = AlertSettings(
                 windows_enabled=alerts_config.get("windows_enabled", True),

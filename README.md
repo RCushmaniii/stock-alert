@@ -1,54 +1,45 @@
-# 📈 StockAlert
+# StockAlert
 
-> A professional Windows desktop application for real-time multi-stock price monitoring with intelligent alerting and visual configuration management.
+> Commercial-grade stock price monitoring with multi-channel alerts for Windows.
 
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/License-Personal-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/License-Proprietary-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-lightgrey.svg)](https://www.microsoft.com/windows)
 
-## ✨ Features
+## Features
 
 ### Core Functionality
-- 📊 **Multi-Stock Monitoring** - Track unlimited stocks simultaneously with individual thresholds
-- 🔔 **Smart Notifications** - Windows Toast alerts with clickable actions to view charts
-- ⚙️ **Visual Configuration** - User-friendly GUI editor for managing stocks and settings
-- 🎯 **Per-Stock Thresholds** - Independent high/low price alerts for each ticker
-- ⏱️ **Configurable Intervals** - Customize check frequency and cooldown periods
-- 🔄 **Real-Time Data** - Live price feeds from Yahoo Finance API
+- **Multi-Stock Monitoring** - Track unlimited stocks with individual high/low thresholds
+- **Multi-Channel Alerts** - Windows notifications, WhatsApp, and email (coming soon)
+- **Background Service** - Continues monitoring even after closing the GUI
+- **Bilingual Support** - Full English and Spanish interface
+- **Professional GUI** - Modern PyQt6 interface with dark/light themes
 
-### Advanced Features
-- 🛡️ **Intelligent Cooldowns** - Per-stock alert throttling to prevent notification spam
-- ✅ **Symbol Validation** - Real-time ticker verification before adding stocks
-- 🎨 **Modern UI** - Clean, professional interface built with FreeSimpleGUI
-- 💾 **JSON Configuration** - Human-readable settings file for easy backup/sharing
-- 🔌 **Modular Architecture** - Clean separation of concerns following SOLID principles
-- 🚨 **Graceful Error Handling** - Automatic retry logic for network failures
+### Background Service Architecture
+- **24/7 Monitoring** - Service runs independently of the GUI
+- **Auto-Reload Config** - Changes are picked up without restart
+- **Graceful Shutdown** - Clean stop via GUI or command line
+- **Market Hours Aware** - Only alerts during trading hours
 
-## 🚀 Quick Start
+### Alert Channels
+- **Windows Toast Notifications** - Click to view stock chart
+- **WhatsApp Alerts** - Via Twilio integration (requires account)
+- **Email Alerts** - Coming soon
+
+## Quick Start
 
 ### Prerequisites
 
-- **Operating System:** Windows 10 or later
-- **Python:** 3.8 or higher
-- **Internet Connection:** Required for real-time stock data
+- **OS:** Windows 10 or later
+- **Python:** 3.10 or higher
+- **API Key:** Free Finnhub API key ([Get one here](https://finnhub.io/))
 
-### Installation Options
-
-#### Option 1: MSI Installer (Recommended for End Users)
-
-Download and run the latest MSI installer from the releases page. This will:
-- Install StockAlert to Program Files
-- Create Start Menu shortcuts
-- Include all dependencies
-
-See [BUILD_MSI.md](docs/BUILD_MSI.md) for building your own MSI installer.
-
-#### Option 2: From Source (For Developers)
+### Installation
 
 1. **Clone the repository:**
    ```powershell
-   git clone <repository-url>
-   cd aa-stock-alert
+   git clone https://github.com/RCushmaniii/stock-alert.git
+   cd stock-alert
    ```
 
 2. **Create and activate virtual environment:**
@@ -59,91 +50,99 @@ See [BUILD_MSI.md](docs/BUILD_MSI.md) for building your own MSI installer.
 
 3. **Install dependencies:**
    ```powershell
-   pip install -r requirements.txt
+   pip install -e ".[dev]"
    ```
 
-4. **Create configuration file:**
+4. **Configure API key:**
    ```powershell
-   Copy-Item config.example.json config.json
+   Copy-Item .env.example .env
+   # Edit .env and add your FINNHUB_API_KEY
    ```
 
 ### Usage
 
-#### 1. Configure Your Stocks (GUI Method - Recommended)
-
+#### Run the GUI Application
 ```powershell
-python config_editor.py
+cd src
+python -m stockalert
 ```
 
-**Settings Tab:**
-- Set check interval (seconds between price checks)
-- Configure cooldown period (seconds between alerts)
-- Enable/disable notifications
-
-**Tickers Tab:**
-- Click **Add Ticker** to add a new stock
-- Enter symbol (e.g., AAPL, MSFT, TSLA)
-- Click **Validate** to verify the symbol exists
-- Set high and low price thresholds
-- Click **Save**
-
-#### 2. Run the Stock Monitor
-
+#### Run the Background Service (Headless)
 ```powershell
-python stock_alert.py
+cd src
+python -m stockalert.service
 ```
 
-The application will:
-- Load configuration from `config.json`
-- Monitor all enabled stocks at your specified interval
-- Send Windows Toast notifications when thresholds are breached
-- Display real-time price updates in the console
-- Continue until you press `Ctrl+C`
+The GUI provides:
+- **Profile Tab** - Set your name, email, and phone for alerts
+- **Settings Tab** - Configure check intervals, cooldown, alert channels
+- **Tickers Tab** - Add/edit/delete stocks with price thresholds
+- **Help Tab** - Tips and documentation
 
-## 📊 Example Output
+### Background Service
 
+The background service allows monitoring to continue even when the GUI is closed:
+
+1. Open the GUI and configure your tickers and settings
+2. Go to **Settings > Background Service**
+3. Select "Background Service" mode
+4. Click **Start Service**
+5. Close the GUI - monitoring continues!
+
+**Command Line Options:**
+```powershell
+# Run in foreground (for debugging)
+python -m stockalert.service --debug
+
+# Install as Windows Service (requires admin)
+python -m stockalert.service --install
+
+# Control Windows Service
+python -m stockalert.service --start
+python -m stockalert.service --stop
+python -m stockalert.service --remove
 ```
-🚀 Starting StockAlert - Phase 2
-📊 Monitoring 4 stock(s)
-⏱️  Check interval: 60s
-⏳ Cooldown period: 300s
-============================================================
 
-  • AAPL (Apple Inc.)
-    High: $190.00 | Low: $180.00
-  • MSFT (Microsoft Corp.)
-    High: $410.00 | Low: $375.00
-  • SPY (SPDR S&P 500 ETF)
-    High: $580.00 | Low: $560.00
-  • TSLA (Tesla Inc.)
-    High: $250.00 | Low: $230.00
+## Configuration
 
-============================================================
+### Environment Variables (.env)
 
-[2025-10-23 13:03:40] AAPL: $185.50
-[2025-10-23 13:03:40] MSFT: $415.25
-🔔 [MSFT] Alert sent: MSFT reached $415.25 (threshold: $410.00)
-[2025-10-23 13:03:40] SPY: $575.80
-[2025-10-23 13:03:40] TSLA: $245.60
+```env
+FINNHUB_API_KEY=your_api_key_here
 
-## ⚙️ Configuration
+# For WhatsApp alerts (optional)
+TWILIO_SID=your_twilio_sid
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_WHATSAPP_NUMBER=+14155238886
+```
 
-### Configuration File (`config.json`)
-
-All settings are stored in `config.json` for easy management:
+### Configuration File (config.json)
 
 ```json
 {
+  "version": "3.0.0",
   "settings": {
     "check_interval": 60,
     "cooldown": 300,
-    "notifications_enabled": true
+    "language": "en",
+    "service_mode": "background",
+    "alerts": {
+      "windows_enabled": true,
+      "windows_audio": true,
+      "whatsapp_enabled": false,
+      "email_enabled": false
+    }
+  },
+  "profile": {
+    "name": "Your Name",
+    "email": "your@email.com",
+    "cell": "+15551234567"
   },
   "tickers": [
     {
       "symbol": "AAPL",
       "name": "Apple Inc.",
-      "high_threshold": 190.0,
+      "high_threshold": 200.0,
       "low_threshold": 180.0,
       "enabled": true
     }
@@ -151,226 +150,90 @@ All settings are stored in `config.json` for easy management:
 }
 ```
 
-### Global Settings
+## Architecture
 
-| Parameter | Description | Default | Range |
-|-----------|-------------|---------|-------|
-| `check_interval` | Seconds between price checks | `60` | 10-3600 |
-| `cooldown` | Seconds between alerts per stock | `300` | 60-86400 |
-| `notifications_enabled` | Enable/disable toast notifications | `true` | true/false |
+```
+src/stockalert/
+├── __main__.py           # GUI entry point
+├── app.py                # Main application orchestrator
+├── service.py            # Background service entry point
+├── core/
+│   ├── config.py         # Configuration management
+│   ├── monitor.py        # Stock price monitoring
+│   ├── alert_manager.py  # Multi-channel alert dispatch
+│   ├── twilio_service.py # WhatsApp/SMS integration
+│   ├── service_controller.py  # Service control from GUI
+│   └── windows_service.py     # Windows Service wrapper
+├── api/
+│   ├── finnhub.py        # Finnhub API client
+│   └── rate_limiter.py   # API rate limiting
+├── ui/
+│   ├── main_window.py    # PyQt6 main window
+│   ├── tray_icon.py      # System tray integration
+│   └── dialogs/          # Settings, Profile, Ticker dialogs
+├── i18n/
+│   └── locales/          # en.json, es.json translations
+└── utils/
+    ├── market_hours.py   # NYSE trading hours
+    └── logging_config.py # Structured logging
+```
 
-### Per-Stock Settings
+### Key Design Decisions
 
-| Parameter | Description | Required |
-|-----------|-------------|----------|
-| `symbol` | Stock ticker (e.g., AAPL, MSFT) | ✅ Yes |
-| `name` | Display name | ❌ No (auto-fetched) |
-| `high_threshold` | Upper price alert | ✅ Yes |
-| `low_threshold` | Lower price alert | ✅ Yes |
-| `enabled` | Monitor this stock | ❌ No (default: true) |
+- **Background Service** - Monitoring decoupled from GUI for 24/7 operation
+- **Config File Watching** - Service auto-reloads when settings change
+- **Rate Limiting** - Token bucket algorithm respects Finnhub's 60 calls/min
+- **Multi-Channel Alerts** - Plugin architecture for alert channels
+- **Bilingual** - All UI strings externalized in JSON locale files
 
-## 🧪 Testing
+## Development
 
-### Quick Alert Test
-
-1. **Find current price** on [Yahoo Finance](https://finance.yahoo.com)
-2. **Open config editor:** `python config_editor.py`
-3. **Add test ticker** with tight thresholds:
-   - Symbol: `AAPL` (or any active stock)
-   - High: Current price + $0.50
-   - Low: Current price - $0.50
-4. **Run monitor:** `python stock_alert.py`
-5. **Wait 1-2 check intervals** for alert
-
-### Verify Features
-
-- ✅ **Multi-stock:** Add 3+ tickers, verify all are monitored
-- ✅ **Alerts:** Confirm toast notifications appear
-- ✅ **Cooldown:** Verify alerts don't spam (check console messages)
-- ✅ **Enable/Disable:** Toggle stocks on/off without deleting
-- ✅ **Validation:** Try invalid symbol (e.g., "INVALID123")
-- ✅ **Persistence:** Restart app, verify config loads correctly
-
-## 🛠️ Troubleshooting
-
-### No notifications appearing?
-
-**Check Windows Settings:**
-1. Open Settings → System → Notifications
-2. Ensure notifications are enabled
-3. Verify "Stock Alert" app has permission
-
-**Verify Configuration:**
-- Check `notifications_enabled: true` in `config.json`
-- Ensure thresholds are set correctly (high > low)
-- Confirm price has actually crossed threshold
-- Check cooldown hasn't blocked alert (see console)
-
-### Config editor won't launch?
-
-**Missing FreeSimpleGUI:**
+### Running Tests
 ```powershell
-pip install FreeSimpleGUI
+pytest tests/ -v
 ```
 
-**Alternative:** Use Tkinter version:
+### Code Quality
 ```powershell
-python config_editor_tkinter.py
+ruff check src/
+mypy src/
 ```
 
-### "No data available" error?
-
-- ✅ Check internet connection
-- ✅ Verify ticker symbol on [Yahoo Finance](https://finance.yahoo.com)
-- ✅ Try again (API can be slow)
-- ✅ Check if market is open (prices update less frequently after-hours)
-
-### Symbol validation fails?
-
-- Use official ticker symbols (e.g., `AAPL` not `Apple`)
-- Try searching on Yahoo Finance first
-- Some international stocks may not be available
-
-### App crashes on startup?
-
-**Check config.json syntax:**
+### Building MSI Installer
 ```powershell
-python -m json.tool config.json
+pip install -e ".[build]"
+python setup.py bdist_msi
 ```
 
-**Reset to defaults:**
-```powershell
-Copy-Item config.example.json config.json -Force
-```
+## Troubleshooting
 
-## 📋 Project Structure
+### No alerts appearing?
+1. Check Windows Settings > Notifications > StockAlert is enabled
+2. Verify your Finnhub API key is set in `.env`
+3. Confirm thresholds are set (price must cross threshold)
+4. Check cooldown period hasn't blocked repeated alerts
 
-```
-aa-stock-alert/
-├── stock_alert.py           # Main monitoring application
-├── config_editor.py         # GUI configuration tool (FreeSimpleGUI)
-├── config_editor_tkinter.py # Alternative GUI (Tkinter)
-├── config.json              # User configuration (gitignored)
-├── config.example.json      # Configuration template
-├── requirements.txt         # Python dependencies
-├── requirements-build.txt   # Build/packaging dependencies
-├── setup.py                 # cx_Freeze MSI build configuration
-├── build_msi.ps1           # Automated MSI build script
-├── stock_alert.ico          # Notification icon
-├── README.md               # This file
-├── .gitignore              # Git ignore rules
-├── utils/
-│   ├── __init__.py         # Package marker
-│   └── data_provider.py    # Yahoo Finance API wrapper
-└── docs/
-    ├── prd.md              # Product requirements
-    ├── project-plan.md     # Development roadmap
-    ├── PHASE2_COMPLETE.md  # Phase 2 completion notes
-    └── BUILD_MSI.md        # MSI installer build guide
-```
+### WhatsApp not working?
+1. Ensure Twilio credentials are set in `.env`
+2. You must first send "join <sandbox-keyword>" to Twilio's WhatsApp number
+3. Check your phone number includes country code (e.g., +1)
 
-## 🏗️ Architecture
+### Service won't start?
+1. Check if another instance is already running
+2. View logs in `stockalert_service.log`
+3. Try running with `--debug` flag
 
-### Design Principles
+## License
 
-- **Single Responsibility Principle (SRP)** - Each module has one clear purpose
-- **Separation of Concerns (SoC)** - UI, business logic, and data access are isolated
-- **DRY (Don't Repeat Yourself)** - Shared logic abstracted into reusable components
-- **Graceful Error Handling** - All operations anticipate and handle failures
+Proprietary - CushLabs.ai. All rights reserved.
 
-### Key Components
+## Credits
 
-**`StockAlert`** - Main orchestrator
-- Loads configuration from JSON
-- Manages multiple `StockMonitor` instances
-- Coordinates monitoring loop
-
-**`StockMonitor`** - Per-stock logic
-- Tracks individual stock state
-- Manages cooldown timers
-- Sends notifications
-
-**`DataProvider`** - API abstraction
-- Wraps Yahoo Finance API
-- Validates ticker symbols
-- Handles network errors
-
-**`ConfigEditor`** - GUI interface
-- Visual configuration management
-- Real-time symbol validation
-- JSON persistence
-
-## 🎯 Development Status
-
-### ✅ Phase 1 (Complete)
-- Single-stock monitoring
-- Basic notifications
-- Console output
-- Error handling
-
-### ✅ Phase 2 (Complete)
-- Multi-stock monitoring
-- JSON configuration
-- GUI config editor
-- Per-stock thresholds
-- Modular architecture
-
-### 🔜 Future Enhancements
-- Historical price logging
-- Email/SMS alerts
-- Portfolio tracking
-- Percentage-based thresholds
-- After-hours monitoring toggle
-- Web dashboard
-
-## 📝 Technical Notes
-
-### Logging
-
-**Current:** Console output only (no file logging)
-- Price checks displayed in real-time
-- Alerts logged to console
-- Errors printed with context
-- Zero disk space used
-
-**Rationale:** File logging avoided to prevent bloat from frequent price checks. Console output sufficient for debugging and monitoring.
-
-### Data Source
-
-**Yahoo Finance API** via `yfinance` library
-- Free, no API key required
-- Real-time and historical data
-- Supports stocks, ETFs, indices
-- Rate limits handled gracefully
-
-### Platform
-
-**Windows 10/11 only**
-- Uses `winotify` for native toast notifications
-- PowerShell commands in documentation
-- Could be adapted for macOS/Linux with different notification libraries
-
-## 🤝 Contributing
-
-This is a personal portfolio project demonstrating:
-- Clean code architecture
-- SOLID principles
-- Modern Python development practices
-- User-friendly GUI design
-- Real-world API integration
-
-Feedback and suggestions welcome!
-
-## 📄 License
-
-Personal project - All rights reserved.
-
-## 🙏 Acknowledgments
-
-- **yfinance** - Yahoo Finance API wrapper
-- **FreeSimpleGUI** - Free, open-source GUI framework
+- **Finnhub** - Stock market data API
+- **PyQt6** - Cross-platform GUI framework
+- **Twilio** - WhatsApp/SMS messaging
 - **winotify** - Windows toast notifications
 
 ---
 
-**Built with ❤️ for personal stock monitoring and portfolio demonstration**
+**Built by Robert Cushman | CushLabs.ai**

@@ -47,13 +47,15 @@
   "help": {
     "title": "Help & Tips",
     "getting_started": "Getting Started",
-    "getting_started_content": "AI StockAlert monitors your selected stocks in real-time and sends Windows notifications when prices cross your defined thresholds.\n\n1. Add stocks to monitor in the Tickers tab\n2. Set high and low price thresholds for each stock\n3. The app runs in the background and alerts you when prices trigger",
+    "getting_started_content": "AI StockAlert monitors your selected stocks in real-time and sends alerts via Windows notifications, WhatsApp, or email when prices cross your defined thresholds.\n\n1. Add stocks to monitor in the Tickers tab\n2. Set high and low price thresholds for each stock\n3. Enable the Background Service in Settings to receive alerts 24/7\n4. Close the app - the service keeps running and sending alerts!",
     "settings_tips": "Settings Tips",
-    "settings_tips_content": "• Check Interval: How often the app fetches new prices. Lower values mean more frequent updates but use more API calls. Recommended: 1-5 minutes for active trading, 15-30 minutes for casual monitoring.\n\n• Cooldown Period: Prevents repeated alerts for the same stock. After an alert fires, you won't get another for that stock until the cooldown expires. Recommended: 5-15 minutes.\n\n• Notifications: Enable Windows toast notifications for price alerts. Disable if you only want to monitor prices in the app.",
+    "settings_tips_content": "• Check Interval: How often the app fetches new prices. Lower values mean more frequent updates but use more API calls. Recommended: 1-5 minutes for active trading, 15-30 minutes for casual monitoring.\n\n• Cooldown Period: Prevents repeated alerts for the same stock. After an alert fires, you won't get another for that stock until the cooldown expires. Recommended: 5-15 minutes.\n\n• Alert Channels: Choose how you want to be notified - Windows notifications, WhatsApp, or email. You can enable multiple channels.",
     "tickers_title": "Managing Tickers",
     "tickers_content": "• Add Ticker: Enter the stock symbol (e.g., AAPL, MSFT, GOOGL) and set your price thresholds.\n\n• High Threshold: You'll be alerted when the price rises ABOVE this value.\n\n• Low Threshold: You'll be alerted when the price falls BELOW this value.\n\n• Toggle Enabled: Temporarily disable monitoring for a stock without deleting it.",
     "alerts_title": "Understanding Alerts",
-    "alerts_content": "• Alerts appear as Windows notifications when a stock crosses your threshold.\n\n• Click the notification to open a price chart for that stock.\n\n• The app respects market hours - no alerts during weekends or holidays.\n\n• Demo Mode: If no API key is configured, the app uses simulated data for testing."
+    "alerts_content": "• Alerts appear as Windows notifications when a stock crosses your threshold.\n\n• Click the notification to open a price chart for that stock.\n\n• The app respects market hours - no alerts during weekends or holidays.\n\n• WhatsApp Alerts: Requires your phone number in the Profile tab.",
+    "service_title": "Background Service",
+    "service_content": "• The Background Service allows StockAlert to monitor prices and send alerts even when the GUI is closed.\n\n• Go to Settings > Background Service and click 'Start Service' to enable it.\n\n• The service runs silently in the background until you stop it or restart your computer.\n\n• Your settings and ticker configuration are automatically picked up by the service when you save changes."
   },
   "settings": {
     "title": "Monitoring Settings",
@@ -87,14 +89,13 @@
     "mode_background": "Background Service",
     "mode_background_help": "Monitoring continues even after closing the GUI",
     "service_start": "Start Service",
+    "service_start_help": "Start the background monitoring service. It will continue running even after you close this window.",
     "service_stop": "Stop Service",
-    "service_restart": "Restart",
+    "service_stop_help": "Stop the background monitoring service. You will no longer receive alerts until you start it again.",
     "service_starting": "Starting service...",
     "service_stopping": "Stopping service...",
-    "service_restarting": "Restarting service...",
     "service_started": "Background service started",
     "service_stopped": "Background service stopped",
-    "service_restarted": "Background service restarted",
     "service_embedded_note": "In Embedded mode, monitoring is controlled by the GUI"
   },
   "tickers": {

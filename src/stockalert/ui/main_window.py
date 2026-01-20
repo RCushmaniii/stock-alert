@@ -449,6 +449,16 @@ class MainWindow(QMainWindow):
         alerts_content.setObjectName("helpContent")
         layout.addWidget(alerts_content)
 
+        # Background Service section
+        service_help = QLabel(_("help.service_title"))
+        service_help.setObjectName("helpSectionTitle")
+        layout.addWidget(service_help)
+
+        service_content = QLabel(_("help.service_content"))
+        service_content.setWordWrap(True)
+        service_content.setObjectName("helpContent")
+        layout.addWidget(service_content)
+
         layout.addStretch()
         return widget
 
@@ -737,6 +747,31 @@ QMainWindow, QWidget {
     background-color: rgba(255, 106, 61, 0.1);
     border-color: #FF8A5D;
     color: #FFFFFF;
+}
+
+/* Action buttons (smaller orange buttons for service control, etc.) */
+#actionButton, QPushButton[objectName="actionButton"] {
+    background-color: #FF6A3D;
+    color: #000000;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 100px;
+}
+
+#actionButton:hover, QPushButton[objectName="actionButton"]:hover {
+    background-color: #FF8A5D;
+}
+
+#actionButton:pressed, QPushButton[objectName="actionButton"]:pressed {
+    background-color: #E55A2D;
+}
+
+#actionButton:disabled, QPushButton[objectName="actionButton"]:disabled {
+    background-color: #4A4A4A;
+    color: #888888;
 }
 
 #dangerButton {
@@ -1182,6 +1217,31 @@ QMainWindow, QWidget {
 #secondaryButton:hover {
     background-color: #FFF0EB;
     border-color: #E55A2D;
+}
+
+/* Action buttons (smaller orange buttons for service control, etc.) */
+#actionButton, QPushButton[objectName="actionButton"] {
+    background-color: #FF6A3D;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    min-width: 100px;
+}
+
+#actionButton:hover, QPushButton[objectName="actionButton"]:hover {
+    background-color: #E55A2D;
+}
+
+#actionButton:pressed, QPushButton[objectName="actionButton"]:pressed {
+    background-color: #CC4A1D;
+}
+
+#actionButton:disabled, QPushButton[objectName="actionButton"]:disabled {
+    background-color: #E5E5E5;
+    color: #999999;
 }
 
 #dangerButton {
