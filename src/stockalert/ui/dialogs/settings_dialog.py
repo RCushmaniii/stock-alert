@@ -146,13 +146,12 @@ class SettingsWidget(QWidget):
         audio_layout.addStretch()
         alerts_layout.addRow("", audio_container)
 
-        # Email alerts
-        self.email_alerts_check = QCheckBox(_("settings.alerts_email"))
-        alerts_layout.addRow("", self.email_alerts_check)
-
-        self.email_alerts_help = QLabel(_("settings.alerts_email_help"))
-        self.email_alerts_help.setObjectName("helpLabel")
-        alerts_layout.addRow("", self.email_alerts_help)
+        # SMS alerts (hidden - requires purchased Twilio number)
+        # self.sms_alerts_check = QCheckBox(_("settings.alerts_sms"))
+        # alerts_layout.addRow("", self.sms_alerts_check)
+        # self.sms_alerts_help = QLabel(_("settings.alerts_sms_help"))
+        # self.sms_alerts_help.setObjectName("helpLabel")
+        # alerts_layout.addRow("", self.sms_alerts_help)
 
         # WhatsApp alerts
         self.whatsapp_alerts_check = QCheckBox(_("settings.alerts_whatsapp"))
@@ -161,6 +160,14 @@ class SettingsWidget(QWidget):
         self.whatsapp_alerts_help = QLabel(_("settings.alerts_whatsapp_help"))
         self.whatsapp_alerts_help.setObjectName("helpLabel")
         alerts_layout.addRow("", self.whatsapp_alerts_help)
+
+        # Email alerts
+        self.email_alerts_check = QCheckBox(_("settings.alerts_email"))
+        alerts_layout.addRow("", self.email_alerts_check)
+
+        self.email_alerts_help = QLabel(_("settings.alerts_email_help"))
+        self.email_alerts_help.setObjectName("helpLabel")
+        alerts_layout.addRow("", self.email_alerts_help)
 
         layout.addWidget(alerts_group)
 
@@ -230,8 +237,10 @@ class SettingsWidget(QWidget):
         self.windows_alerts_check.setChecked(alerts.get("windows_enabled", True))
         self.windows_audio_check.setChecked(alerts.get("windows_audio", True))
         self.windows_audio_check.setEnabled(alerts.get("windows_enabled", True))
-        self.email_alerts_check.setChecked(alerts.get("email_enabled", False))
+        # SMS hidden for now - requires purchased Twilio number
+        # self.sms_alerts_check.setChecked(alerts.get("sms_enabled", False))
         self.whatsapp_alerts_check.setChecked(alerts.get("whatsapp_enabled", False))
+        self.email_alerts_check.setChecked(alerts.get("email_enabled", False))
 
         # Set language combo
         current_lang = settings.get("language", "en")
@@ -255,16 +264,18 @@ class SettingsWidget(QWidget):
             # Get alert settings
             windows_enabled = self.windows_alerts_check.isChecked()
             windows_audio = self.windows_audio_check.isChecked()
-            email_enabled = self.email_alerts_check.isChecked()
             whatsapp_enabled = self.whatsapp_alerts_check.isChecked()
+            email_enabled = self.email_alerts_check.isChecked()
 
             # Update configuration
             self.config_manager.set("settings.check_interval", check_interval, save=False)
             self.config_manager.set("settings.cooldown", cooldown, save=False)
             self.config_manager.set("settings.alerts.windows_enabled", windows_enabled, save=False)
             self.config_manager.set("settings.alerts.windows_audio", windows_audio, save=False)
-            self.config_manager.set("settings.alerts.email_enabled", email_enabled, save=False)
+            # SMS hidden for now - requires purchased Twilio number
+            # self.config_manager.set("settings.alerts.sms_enabled", sms_enabled, save=False)
             self.config_manager.set("settings.alerts.whatsapp_enabled", whatsapp_enabled, save=False)
+            self.config_manager.set("settings.alerts.email_enabled", email_enabled, save=False)
             self.config_manager.set("settings.language", language, save=True)
 
             # Update status
@@ -296,10 +307,13 @@ class SettingsWidget(QWidget):
         # Alert settings
         self.windows_alerts_check.setText(_("settings.alerts_windows"))
         self.windows_audio_check.setText(_("settings.alerts_windows_audio"))
-        self.email_alerts_check.setText(_("settings.alerts_email"))
-        self.email_alerts_help.setText(_("settings.alerts_email_help"))
+        # SMS hidden for now
+        # self.sms_alerts_check.setText(_("settings.alerts_sms"))
+        # self.sms_alerts_help.setText(_("settings.alerts_sms_help"))
         self.whatsapp_alerts_check.setText(_("settings.alerts_whatsapp"))
         self.whatsapp_alerts_help.setText(_("settings.alerts_whatsapp_help"))
+        self.email_alerts_check.setText(_("settings.alerts_email"))
+        self.email_alerts_help.setText(_("settings.alerts_email_help"))
 
         self.language_label.setText(_("settings.language"))
         self.language_help.setText(_("settings.language_help"))

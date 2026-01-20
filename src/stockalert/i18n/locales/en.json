@@ -66,6 +66,8 @@
     "alerts_windows_audio": "Play sound with notification",
     "alerts_email": "Email Alerts",
     "alerts_email_help": "Requires email address in Profile tab",
+    "alerts_sms": "SMS Text Alerts",
+    "alerts_sms_help": "Requires cell phone in Profile tab",
     "alerts_whatsapp": "WhatsApp Alerts",
     "alerts_whatsapp_help": "Requires cell phone in Profile tab",
     "language_title": "Language",

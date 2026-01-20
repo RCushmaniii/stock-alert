@@ -66,6 +66,8 @@
     "alerts_windows_audio": "Reproducir sonido con la notificación",
     "alerts_email": "Alertas por Correo",
     "alerts_email_help": "Requiere correo electrónico en la pestaña Perfil",
+    "alerts_sms": "Alertas de Texto SMS",
+    "alerts_sms_help": "Requiere teléfono celular en la pestaña Perfil",
     "alerts_whatsapp": "Alertas de WhatsApp",
     "alerts_whatsapp_help": "Requiere teléfono celular en la pestaña Perfil",
     "language_title": "Idioma",
