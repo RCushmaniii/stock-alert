@@ -35,6 +35,7 @@ dependencies = [
     "pytz>=2024.1",
     "Pillow>=10.0.0",
     "requests>=2.31.0",
+    "twilio>=8.0.0",
 ]
 
 [project.optional-dependencies]
@@ -56,6 +57,7 @@ build = [
 
 [project.scripts]
 stockalert = "stockalert.__main__:main"
+stockalert-service = "stockalert.service:main"
 
 [project.gui-scripts]
 stockalert-gui = "stockalert.__main__:main"

@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Callable
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from stockalert.core.service_controller import ServiceController, ServiceMode, ServiceStatus
 from stockalert.i18n.translator import _
 
 if TYPE_CHECKING:
@@ -58,8 +59,17 @@ class SettingsWidget(QWidget):
         self.translator = translator
         self.on_save = on_save
 
+        # Service controller
+        self.service_controller = ServiceController(on_status_changed=self._on_service_status_changed)
+
+        # Status update timer
+        self._status_timer = QTimer(self)
+        self._status_timer.timeout.connect(self._update_service_status)
+        self._status_timer.start(5000)  # Update every 5 seconds
+
         self._setup_ui()
         self._load_settings()
+        self._update_service_status()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
@@ -191,6 +201,69 @@ class SettingsWidget(QWidget):
 
         layout.addWidget(lang_group)
 
+        # Service Control group
+        service_group = QGroupBox(_("settings.service_title"))
+        service_layout = QFormLayout(service_group)
+        service_layout.setVerticalSpacing(16)
+        service_layout.setHorizontalSpacing(20)
+        service_layout.setContentsMargins(24, 32, 24, 24)
+
+        # Service status
+        self.service_status_label = QLabel(_("settings.service_status"))
+        self.service_status_value = QLabel("")
+        self.service_status_value.setObjectName("serviceStatus")
+        service_layout.addRow(self.service_status_label, self.service_status_value)
+
+        # Service mode
+        self.service_mode_label = QLabel(_("settings.service_mode"))
+
+        mode_container = QWidget()
+        mode_layout = QHBoxLayout(mode_container)
+        mode_layout.setContentsMargins(0, 0, 0, 0)
+        mode_layout.setSpacing(16)
+
+        self.service_mode_group = QButtonGroup(self)
+
+        self.mode_embedded_radio = QRadioButton(_("settings.mode_embedded"))
+        self.mode_embedded_radio.setToolTip(_("settings.mode_embedded_help"))
+        self.service_mode_group.addButton(self.mode_embedded_radio, 0)
+        mode_layout.addWidget(self.mode_embedded_radio)
+
+        self.mode_background_radio = QRadioButton(_("settings.mode_background"))
+        self.mode_background_radio.setToolTip(_("settings.mode_background_help"))
+        self.service_mode_group.addButton(self.mode_background_radio, 1)
+        mode_layout.addWidget(self.mode_background_radio)
+
+        mode_layout.addStretch()
+        service_layout.addRow(self.service_mode_label, mode_container)
+
+        self.service_mode_help = QLabel(_("settings.service_mode_help"))
+        self.service_mode_help.setObjectName("helpLabel")
+        service_layout.addRow("", self.service_mode_help)
+
+        # Service control buttons
+        btn_container = QWidget()
+        btn_layout = QHBoxLayout(btn_container)
+        btn_layout.setContentsMargins(0, 8, 0, 0)
+        btn_layout.setSpacing(12)
+
+        self.service_start_btn = QPushButton(_("settings.service_start"))
+        self.service_start_btn.clicked.connect(self._on_service_start)
+        btn_layout.addWidget(self.service_start_btn)
+
+        self.service_stop_btn = QPushButton(_("settings.service_stop"))
+        self.service_stop_btn.clicked.connect(self._on_service_stop)
+        btn_layout.addWidget(self.service_stop_btn)
+
+        self.service_restart_btn = QPushButton(_("settings.service_restart"))
+        self.service_restart_btn.clicked.connect(self._on_service_restart)
+        btn_layout.addWidget(self.service_restart_btn)
+
+        btn_layout.addStretch()
+        service_layout.addRow("", btn_container)
+
+        layout.addWidget(service_group)
+
         # Status label
         self.status_label = QLabel("")
         layout.addWidget(self.status_label)
@@ -248,6 +321,13 @@ class SettingsWidget(QWidget):
         if index >= 0:
             self.language_combo.setCurrentIndex(index)
 
+        # Set service mode
+        service_mode = settings.get("service_mode", "embedded")
+        if service_mode == "background":
+            self.mode_background_radio.setChecked(True)
+        else:
+            self.mode_embedded_radio.setChecked(True)
+
     def _on_save_clicked(self) -> None:
         """Handle save button click."""
         try:
@@ -276,7 +356,11 @@ class SettingsWidget(QWidget):
             # self.config_manager.set("settings.alerts.sms_enabled", sms_enabled, save=False)
             self.config_manager.set("settings.alerts.whatsapp_enabled", whatsapp_enabled, save=False)
             self.config_manager.set("settings.alerts.email_enabled", email_enabled, save=False)
-            self.config_manager.set("settings.language", language, save=True)
+            self.config_manager.set("settings.language", language, save=False)
+
+            # Save service mode
+            service_mode = "background" if self.mode_background_radio.isChecked() else "embedded"
+            self.config_manager.set("settings.service_mode", service_mode, save=True)
 
             # Update status
             self.status_label.setText(_("settings.saved"))
@@ -318,3 +402,105 @@ class SettingsWidget(QWidget):
         self.language_label.setText(_("settings.language"))
         self.language_help.setText(_("settings.language_help"))
         self.save_button.setText(_("settings.save"))
+
+        # Service settings
+        self.service_status_label.setText(_("settings.service_status"))
+        self.service_mode_label.setText(_("settings.service_mode"))
+        self.service_mode_help.setText(_("settings.service_mode_help"))
+        self.mode_embedded_radio.setText(_("settings.mode_embedded"))
+        self.mode_embedded_radio.setToolTip(_("settings.mode_embedded_help"))
+        self.mode_background_radio.setText(_("settings.mode_background"))
+        self.mode_background_radio.setToolTip(_("settings.mode_background_help"))
+        self.service_start_btn.setText(_("settings.service_start"))
+        self.service_stop_btn.setText(_("settings.service_stop"))
+        self.service_restart_btn.setText(_("settings.service_restart"))
+
+    def _on_service_status_changed(self, state) -> None:
+        """Handle service status change callback."""
+        self._update_service_status()
+
+    def _update_service_status(self) -> None:
+        """Update the service status display."""
+        state = self.service_controller.get_state()
+        status_text = self.service_controller.get_status_display()
+
+        self.service_status_value.setText(status_text)
+
+        # Update status color
+        if state.status == ServiceStatus.RUNNING:
+            self.service_status_value.setStyleSheet("color: green; font-weight: bold;")
+            self.service_start_btn.setEnabled(False)
+            self.service_stop_btn.setEnabled(True)
+            self.service_restart_btn.setEnabled(True)
+        elif state.status == ServiceStatus.STOPPED:
+            self.service_status_value.setStyleSheet("color: gray;")
+            self.service_start_btn.setEnabled(True)
+            self.service_stop_btn.setEnabled(False)
+            self.service_restart_btn.setEnabled(False)
+        else:
+            self.service_status_value.setStyleSheet("color: orange;")
+            self.service_start_btn.setEnabled(False)
+            self.service_stop_btn.setEnabled(False)
+            self.service_restart_btn.setEnabled(False)
+
+    def _on_service_start(self) -> None:
+        """Handle service start button click."""
+        # Determine mode based on radio selection
+        if self.mode_background_radio.isChecked():
+            mode = ServiceMode.BACKGROUND_PROCESS
+        else:
+            mode = ServiceMode.EMBEDDED
+
+        if mode == ServiceMode.EMBEDDED:
+            self.status_label.setText(_("settings.service_embedded_note"))
+            self.status_label.setStyleSheet("color: orange;")
+            return
+
+        self.service_start_btn.setEnabled(False)
+        self.status_label.setText(_("settings.service_starting"))
+        self.status_label.setStyleSheet("color: blue;")
+
+        success, message = self.service_controller.start(mode)
+
+        if success:
+            self.status_label.setText(_("settings.service_started"))
+            self.status_label.setStyleSheet("color: green;")
+        else:
+            self.status_label.setText(message)
+            self.status_label.setStyleSheet("color: red;")
+
+        self._update_service_status()
+
+    def _on_service_stop(self) -> None:
+        """Handle service stop button click."""
+        self.service_stop_btn.setEnabled(False)
+        self.status_label.setText(_("settings.service_stopping"))
+        self.status_label.setStyleSheet("color: blue;")
+
+        success, message = self.service_controller.stop()
+
+        if success:
+            self.status_label.setText(_("settings.service_stopped"))
+            self.status_label.setStyleSheet("color: green;")
+        else:
+            self.status_label.setText(message)
+            self.status_label.setStyleSheet("color: red;")
+
+        self._update_service_status()
+
+    def _on_service_restart(self) -> None:
+        """Handle service restart button click."""
+        self.service_restart_btn.setEnabled(False)
+        self.status_label.setText(_("settings.service_restarting"))
+        self.status_label.setStyleSheet("color: blue;")
+
+        success, message = self.service_controller.restart()
+
+        if success:
+            self.status_label.setText(_("settings.service_restarted"))
+            self.status_label.setStyleSheet("color: green;")
+        else:
+            self.status_label.setText(message)
+            self.status_label.setStyleSheet("color: red;")
+
+        self._update_service_status()
