@@ -80,9 +80,6 @@ class MainWindow(QMainWindow):
         """Set up the user interface."""
         self.setWindowTitle(_("app.name"))
 
-        # Full screen by default
-        self.showMaximized()
-
         # Load icon
         icon_path = Path(__file__).parent.parent.parent.parent / "stock_alert.ico"
         if icon_path.exists():
@@ -312,14 +309,14 @@ class MainWindow(QMainWindow):
 
         header_layout.addStretch()
 
-        # Buttons at top right
+        # Buttons at top right - all action buttons use orange styling
         self.add_button = QPushButton(_("tickers.add"))
-        self.add_button.setObjectName("primaryButton")
+        self.add_button.setObjectName("actionButton")
         self.add_button.clicked.connect(self._on_add_ticker)
         header_layout.addWidget(self.add_button)
 
         self.edit_button = QPushButton(_("tickers.edit"))
-        self.edit_button.setObjectName("secondaryButton")
+        self.edit_button.setObjectName("actionButton")
         self.edit_button.clicked.connect(self._on_edit_ticker)
         header_layout.addWidget(self.edit_button)
 
@@ -329,7 +326,7 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(self.delete_button)
 
         self.toggle_button = QPushButton(_("tickers.toggle"))
-        self.toggle_button.setObjectName("secondaryButton")
+        self.toggle_button.setObjectName("actionButton")
         self.toggle_button.clicked.connect(self._on_toggle_ticker)
         header_layout.addWidget(self.toggle_button)
 
@@ -340,13 +337,8 @@ class MainWindow(QMainWindow):
         self.ticker_table.setObjectName("tickerTable")
         self.ticker_table.setColumnCount(7)
 
-        # Create select all checkbox for header
-        self.select_all_checkbox = QCheckBox()
-        self.select_all_checkbox.setToolTip("Select All")
-        self.select_all_checkbox.stateChanged.connect(self._on_select_all_changed)
-
         self.ticker_table.setHorizontalHeaderLabels([
-            "",  # Checkbox column
+            "",  # Checkbox column - will add widget
             _("tickers.symbol"),
             _("tickers.name"),
             _("tickers.high_threshold"),
@@ -355,10 +347,10 @@ class MainWindow(QMainWindow):
             _("tickers.enabled"),
         ])
 
-        # Add select all checkbox to header
+        # Set up header
         header = self.ticker_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
-        self.ticker_table.setColumnWidth(0, 40)
+        self.ticker_table.setColumnWidth(0, 50)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
@@ -366,14 +358,62 @@ class MainWindow(QMainWindow):
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
 
-        self.ticker_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.ticker_table.setSelectionMode(QTableWidget.SelectionMode.MultiSelection)
+        # Set the first column header to have a clickable select all indicator
+        self.ticker_table.horizontalHeaderItem(0).setText("☐")
+
+        # Create a clickable header for select all
+        header.sectionClicked.connect(self._on_header_clicked)
+
+        # Disable row selection - only use checkboxes
+        self.ticker_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         self.ticker_table.setAlternatingRowColors(True)
         self.ticker_table.setMinimumHeight(300)
+        self.ticker_table.verticalHeader().setDefaultSectionSize(40)
+        self.ticker_table.verticalHeader().setVisible(False)
 
         layout.addWidget(self.ticker_table)
 
+        # Initial button state (disabled until selection)
+        self._update_action_buttons()
+
         return widget
+
+    def _on_header_clicked(self, logical_index: int) -> None:
+        """Handle header click - toggle select all for first column."""
+        if logical_index == 0:
+            # Toggle all checkboxes
+            all_checked = all(
+                self.ticker_table.cellWidget(row, 0).findChild(QCheckBox).isChecked()
+                for row in range(self.ticker_table.rowCount())
+                if self.ticker_table.cellWidget(row, 0)
+            ) if self.ticker_table.rowCount() > 0 else False
+
+            new_state = not all_checked
+
+            for row in range(self.ticker_table.rowCount()):
+                checkbox_widget = self.ticker_table.cellWidget(row, 0)
+                if checkbox_widget:
+                    checkbox = checkbox_widget.findChild(QCheckBox)
+                    if checkbox:
+                        checkbox.setChecked(new_state)
+
+            # Update header text to show state
+            self._update_select_all_header()
+
+    def _update_select_all_header(self) -> None:
+        """Update the select all header text based on selection state."""
+        if self.ticker_table.rowCount() == 0:
+            self.ticker_table.horizontalHeaderItem(0).setText("☐")
+            return
+
+        all_checked = all(
+            self.ticker_table.cellWidget(row, 0).findChild(QCheckBox).isChecked()
+            for row in range(self.ticker_table.rowCount())
+            if self.ticker_table.cellWidget(row, 0)
+        )
+
+        # Use filled or empty box character
+        self.ticker_table.horizontalHeaderItem(0).setText("☑" if all_checked else "☐")
 
     def _on_select_all_changed(self, state: int) -> None:
         """Handle select all checkbox state change."""
@@ -397,6 +437,23 @@ class MainWindow(QMainWindow):
                     if item:
                         selected.append(item.text())
         return selected
+
+    def _update_action_buttons(self) -> None:
+        """Update action button states based on checkbox selection."""
+        selected = self._get_selected_symbols()
+        count = len(selected)
+
+        # Edit: only enabled when exactly 1 selected
+        self.edit_button.setEnabled(count == 1)
+
+        # Delete and Toggle: enabled when 1 or more selected
+        self.delete_button.setEnabled(count >= 1)
+        self.toggle_button.setEnabled(count >= 1)
+
+    def _on_checkbox_changed(self) -> None:
+        """Handle individual checkbox state change."""
+        self._update_action_buttons()
+        self._update_select_all_header()
 
     def _create_help_tab(self) -> QWidget:
         """Create the help tab with instructions and tips."""
@@ -540,8 +597,8 @@ QMainWindow, QWidget {
     color: #666666;
     font-size: 14px;
     font-weight: normal;
-    padding: 8px 12px;
-    min-width: 40px;
+    padding: 4px 2px;
+    min-width: 24px;
 }
 
 #langButton:hover {
@@ -558,7 +615,7 @@ QMainWindow, QWidget {
 #langSeparator {
     color: #666666;
     font-size: 14px;
-    padding: 0 4px;
+    padding: 0 2px;
     background-color: transparent;
 }
 
@@ -712,6 +769,16 @@ QMainWindow, QWidget {
     text-transform: uppercase;
 }
 
+#tickerTable QTableCornerButton::section {
+    background-color: #1A1A1A;
+    border: none;
+    border-bottom: 1px solid #2A2A2A;
+}
+
+#tickerTable QWidget {
+    background-color: transparent;
+}
+
 /* Buttons */
 #primaryButton, QPushButton[objectName="primaryButton"] {
     background-color: #FF6A3D;
@@ -775,19 +842,22 @@ QMainWindow, QWidget {
 }
 
 #dangerButton {
-    background-color: transparent;
-    color: #f4212e;
-    border: 1px solid #661111;
-    border-radius: 8px;
-    padding: 12px 24px;
-    font-size: 15px;
+    background-color: #DC3545;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
     font-weight: 600;
-    min-width: 120px;
+    min-width: 100px;
 }
 
 #dangerButton:hover {
-    background-color: rgba(244, 33, 46, 0.1);
-    border-color: #f4212e;
+    background-color: #C82333;
+}
+
+#dangerButton:pressed {
+    background-color: #A71D2A;
 }
 
 /* Captions/Labels - 12px muted grey */
@@ -836,13 +906,42 @@ QCheckBox {
 QCheckBox::indicator {
     width: 22px;
     height: 22px;
-    border-radius: 4px;
+    border-radius: 0px;
     border: 2px solid #2A2A2A;
     background-color: #1A1A1A;
 }
 
 QCheckBox::indicator:checked {
     background-color: #FF6A3D;
+    border-color: #FF6A3D;
+}
+
+/* Ticker table checkboxes - square shape */
+#tickerCheckbox {
+    spacing: 0px;
+    margin: 0px;
+    padding: 0px;
+}
+
+#tickerCheckbox::indicator {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    max-width: 20px;
+    max-height: 20px;
+    border-radius: 0px;
+    border: 2px solid #555555;
+    background-color: #1A1A1A;
+}
+
+#tickerCheckbox::indicator:checked {
+    background-color: #FF6A3D;
+    border-color: #FF6A3D;
+    image: none;
+}
+
+#tickerCheckbox::indicator:hover {
     border-color: #FF6A3D;
 }
 
@@ -1011,8 +1110,8 @@ QMainWindow, QWidget {
     color: #666666;
     font-size: 14px;
     font-weight: normal;
-    padding: 8px 12px;
-    min-width: 40px;
+    padding: 4px 2px;
+    min-width: 24px;
 }
 
 #langButton:hover {
@@ -1029,7 +1128,7 @@ QMainWindow, QWidget {
 #langSeparator {
     color: #999999;
     font-size: 14px;
-    padding: 0 4px;
+    padding: 0 2px;
     background-color: transparent;
 }
 
@@ -1183,6 +1282,16 @@ QMainWindow, QWidget {
     text-transform: uppercase;
 }
 
+#tickerTable QTableCornerButton::section {
+    background-color: #FAFAFA;
+    border: none;
+    border-bottom: 1px solid #E5E5E5;
+}
+
+#tickerTable QWidget {
+    background-color: transparent;
+}
+
 /* Buttons */
 #primaryButton, QPushButton[objectName="primaryButton"] {
     background-color: #FF6A3D;
@@ -1245,19 +1354,22 @@ QMainWindow, QWidget {
 }
 
 #dangerButton {
-    background-color: transparent;
-    color: #DC2626;
-    border: 1px solid #FCA5A5;
-    border-radius: 8px;
-    padding: 12px 24px;
-    font-size: 15px;
+    background-color: #DC3545;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
     font-weight: 600;
-    min-width: 120px;
+    min-width: 100px;
 }
 
 #dangerButton:hover {
-    background-color: #FEF2F2;
-    border-color: #DC2626;
+    background-color: #C82333;
+}
+
+#dangerButton:pressed {
+    background-color: #A71D2A;
 }
 
 /* Captions/Labels - 12px muted grey */
@@ -1305,13 +1417,42 @@ QCheckBox {
 QCheckBox::indicator {
     width: 22px;
     height: 22px;
-    border-radius: 4px;
+    border-radius: 0px;
     border: 2px solid #E5E5E5;
     background-color: #FFFFFF;
 }
 
 QCheckBox::indicator:checked {
     background-color: #FF6A3D;
+    border-color: #FF6A3D;
+}
+
+/* Ticker table checkboxes - square shape */
+#tickerCheckbox {
+    spacing: 0px;
+    margin: 0px;
+    padding: 0px;
+}
+
+#tickerCheckbox::indicator {
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    min-height: 20px;
+    max-width: 20px;
+    max-height: 20px;
+    border-radius: 0px;
+    border: 2px solid #CCCCCC;
+    background-color: #FFFFFF;
+}
+
+#tickerCheckbox::indicator:checked {
+    background-color: #FF6A3D;
+    border-color: #FF6A3D;
+    image: none;
+}
+
+#tickerCheckbox::indicator:hover {
     border-color: #FF6A3D;
 }
 
@@ -1462,17 +1603,40 @@ QDialog {
         tickers = self.config_manager.get_tickers()
         self.ticker_table.setRowCount(len(tickers))
 
-        # Reset select all checkbox
-        self.select_all_checkbox.setChecked(False)
-
         for row, ticker in enumerate(tickers):
-            # Checkbox column
+            # Checkbox column - center checkbox in cell
             checkbox_widget = QWidget()
+            checkbox_widget.setStyleSheet("background-color: transparent;")
             checkbox_layout = QHBoxLayout(checkbox_widget)
-            checkbox_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
             checkbox_layout.setContentsMargins(0, 0, 0, 0)
+            checkbox_layout.addStretch()
             checkbox = QCheckBox()
+            checkbox.setObjectName("tickerCheckbox")
+            checkbox.setFixedSize(18, 18)
+            checkbox.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            checkbox.setStyleSheet("""
+                QCheckBox {
+                    spacing: 0px;
+                    background-color: transparent;
+                }
+                QCheckBox::indicator {
+                    width: 16px;
+                    height: 16px;
+                    border: 2px solid #555555;
+                    border-radius: 0px;
+                    background-color: #1A1A1A;
+                }
+                QCheckBox::indicator:checked {
+                    background-color: #FF6A3D;
+                    border-color: #FF6A3D;
+                }
+                QCheckBox::indicator:hover {
+                    border-color: #FF6A3D;
+                }
+            """)
+            checkbox.stateChanged.connect(self._on_checkbox_changed)
             checkbox_layout.addWidget(checkbox)
+            checkbox_layout.addStretch()
             self.ticker_table.setCellWidget(row, 0, checkbox_widget)
 
             # Symbol
@@ -1512,6 +1676,10 @@ QDialog {
             enabled_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             self.ticker_table.setItem(row, 6, enabled_item)
 
+        # Update button states and header
+        self._update_action_buttons()
+        self._update_select_all_header()
+
     def _get_selected_row(self) -> int:
         """Get the currently selected row index, or -1 if none."""
         selection = self.ticker_table.selectedItems()
@@ -1542,14 +1710,16 @@ QDialog {
 
     def _on_edit_ticker(self) -> None:
         """Handle edit ticker button."""
-        symbol = self._get_selected_symbol()
-        if not symbol:
+        selected = self._get_selected_symbols()
+        if len(selected) != 1:
             QMessageBox.warning(
                 self,
                 _("errors.title"),
                 _("tickers.no_selection"),
             )
             return
+
+        symbol = selected[0]
 
         # Find ticker data
         tickers = self.config_manager.get_tickers()
@@ -1570,8 +1740,8 @@ QDialog {
 
     def _on_delete_ticker(self) -> None:
         """Handle delete ticker button."""
-        symbol = self._get_selected_symbol()
-        if not symbol:
+        selected = self._get_selected_symbols()
+        if not selected:
             QMessageBox.warning(
                 self,
                 _("errors.title"),
@@ -1579,15 +1749,23 @@ QDialog {
             )
             return
 
+        # Confirmation message varies by count
+        count = len(selected)
+        if count == 1:
+            confirm_msg = _("tickers.delete_confirm", symbol=selected[0])
+        else:
+            confirm_msg = _("tickers.delete_confirm_multiple", count=count)
+
         result = QMessageBox.question(
             self,
             _("dialogs.confirm"),
-            _("tickers.delete_confirm", symbol=symbol),
+            confirm_msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
 
         if result == QMessageBox.StandardButton.Yes:
-            self.config_manager.delete_ticker(symbol)
+            for symbol in selected:
+                self.config_manager.delete_ticker(symbol)
             self._refresh_ticker_table()
             self.status_bar.showMessage(_("tickers.delete_success"))
             if self.on_settings_changed:
@@ -1595,8 +1773,8 @@ QDialog {
 
     def _on_toggle_ticker(self) -> None:
         """Handle toggle ticker button."""
-        symbol = self._get_selected_symbol()
-        if not symbol:
+        selected = self._get_selected_symbols()
+        if not selected:
             QMessageBox.warning(
                 self,
                 _("errors.title"),
@@ -1604,7 +1782,8 @@ QDialog {
             )
             return
 
-        self.config_manager.toggle_ticker(symbol)
+        for symbol in selected:
+            self.config_manager.toggle_ticker(symbol)
         self._refresh_ticker_table()
         if self.on_settings_changed:
             self.on_settings_changed()

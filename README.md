@@ -223,6 +223,18 @@ python setup.py bdist_msi
 2. View logs in `stockalert_service.log`
 3. Try running with `--debug` flag
 
+## Documentation
+
+Detailed documentation is available in the `docs/` folder:
+
+| Folder | Contents |
+|--------|----------|
+| `docs/guides/` | Build guides, MSI creation, code signing |
+| `docs/developer/` | Architecture, API setup, contributing |
+| `docs/user/` | User guides (English & Spanish) |
+| `docs/legal/` | EULA, privacy policy, licenses |
+| `docs/archive/` | Legacy v2.x documentation |
+
 ## License
 
 Proprietary - CushLabs.ai. All rights reserved.

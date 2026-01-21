@@ -124,7 +124,7 @@ class TrayIcon(QSystemTrayIcon):
             self.main_window.hide()
             self.show_action.setText(_("tray.menu.show"))
         else:
-            self.main_window.show()
+            self.main_window.showMaximized()
             self.main_window.raise_()
             self.main_window.activateWindow()
             self.show_action.setText(_("tray.menu.hide"))

@@ -118,8 +118,11 @@
     "add_success": "¡Acción agregada exitosamente!",
     "edit_success": "¡Acción actualizada exitosamente!",
     "delete_confirm": "¿Eliminar la acción {symbol}?",
+    "delete_confirm_multiple": "¿Eliminar {count} acciones?",
     "delete_success": "¡Acción eliminada exitosamente!",
-    "no_selection": "Por favor seleccione una acción primero"
+    "no_selection": "Por favor seleccione una acción primero",
+    "current_price": "Precio Actual",
+    "refresh_price": "Actualizar"
   },
   "alerts": {
     "high": {

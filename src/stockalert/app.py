@@ -22,6 +22,10 @@ from PyQt6.QtWidgets import QApplication
 from stockalert.core.alert_manager import AlertManager, AlertSettings
 from stockalert.core.config import ConfigManager
 from stockalert.core.monitor import StockMonitor
+from stockalert.core.windows_service import (
+    get_background_process_status,
+    stop_background_process,
+)
 from stockalert.i18n.translator import Translator, set_translator
 from stockalert.ui.main_window import MainWindow
 from stockalert.ui.tray_icon import TrayIcon
@@ -51,6 +55,10 @@ class StockAlertApp:
         """
         self.debug = debug
         self.start_minimized = start_minimized
+
+        # Clean up any existing background service before starting
+        # This ensures we're running the latest code after updates
+        self._cleanup_existing_service()
 
         # Determine application directory
         if getattr(sys, "frozen", False):
@@ -95,6 +103,24 @@ class StockAlertApp:
             },
         )
 
+    def _cleanup_existing_service(self) -> None:
+        """Stop any existing background service before starting.
+
+        This ensures we're running the latest code after updates or
+        during development when code changes.
+        """
+        status = get_background_process_status()
+        if status.get("running"):
+            pid = status.get("pid")
+            logger.info(f"Found existing background service (PID: {pid}), stopping it...")
+            result = stop_background_process()
+            if result == 0:
+                logger.info("Successfully stopped existing background service")
+            else:
+                logger.warning("Failed to stop existing background service")
+        else:
+            logger.debug("No existing background service found")
+
     def _setup_api_provider(self) -> BaseProvider:
         """Set up the stock data API provider."""
         from stockalert.api.finnhub import FinnhubProvider
@@ -125,6 +151,14 @@ class StockAlertApp:
             settings=alert_settings,
         )
 
+        self.monitor = StockMonitor(
+            config_manager=self.config_manager,
+            provider=provider,
+            alert_manager=self.alert_manager,
+            market_hours=self.market_hours,
+            debug=self.debug,
+        )
+
     def _load_alert_settings(self) -> AlertSettings:
         """Load alert settings from configuration."""
         settings = self.config_manager.settings
@@ -139,14 +173,6 @@ class StockAlertApp:
             email_enabled=alerts_config.get("email_enabled", False),
             phone_number=profile.get("cell", ""),
             email_address=profile.get("email", ""),
-        )
-
-        self.monitor = StockMonitor(
-            config_manager=self.config_manager,
-            provider=provider,
-            alert_manager=self.alert_manager,
-            market_hours=self.market_hours,
-            debug=self.debug,
         )
 
     def _setup_ui(self) -> None:
@@ -261,7 +287,7 @@ class StockAlertApp:
             logger.info("Started minimized to system tray")
         else:
             if self.main_window:
-                self.main_window.show()
+                self.main_window.showMaximized()
             if self.tray_icon:
                 self.tray_icon.show()
 

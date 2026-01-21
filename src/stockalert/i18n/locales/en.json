@@ -118,8 +118,11 @@
     "add_success": "Ticker added successfully!",
     "edit_success": "Ticker updated successfully!",
     "delete_confirm": "Delete ticker {symbol}?",
+    "delete_confirm_multiple": "Delete {count} tickers?",
     "delete_success": "Ticker deleted successfully!",
-    "no_selection": "Please select a ticker first"
+    "no_selection": "Please select a ticker first",
+    "current_price": "Current Price",
+    "refresh_price": "Refresh"
   },
   "alerts": {
     "high": {

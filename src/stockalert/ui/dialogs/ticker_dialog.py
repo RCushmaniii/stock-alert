@@ -56,10 +56,13 @@ class TickerDialog(QDialog):
         self.translator = translator
         self.ticker = ticker
         self.is_edit = ticker is not None
+        self._current_price: float | None = None
 
         self._setup_ui()
         if ticker:
             self._load_ticker(ticker)
+            # Fetch current price in edit mode
+            self._refresh_price()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
@@ -112,6 +115,14 @@ class TickerDialog(QDialog):
         self.enabled_check.setChecked(True)
         form_layout.addRow(_("tickers.enabled") + ":", self.enabled_check)
 
+        # Current price (shown for both add and edit)
+        price_layout = QHBoxLayout()
+        self.price_label = QLabel("--")
+        self.price_label.setStyleSheet("font-size: 16px; font-weight: bold;")
+        price_layout.addWidget(self.price_label)
+        price_layout.addStretch()
+        form_layout.addRow(_("tickers.current_price") + ":", price_layout)
+
         layout.addLayout(form_layout)
 
         # Status label
@@ -123,16 +134,119 @@ class TickerDialog(QDialog):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
 
+        # Refresh button (edit mode only)
+        if self.is_edit:
+            self.refresh_button = QPushButton(_("tickers.refresh_price"))
+            self.refresh_button.setObjectName("actionButton")
+            self.refresh_button.clicked.connect(self._refresh_price)
+            button_layout.addWidget(self.refresh_button)
+
+        # Validate button styling (add mode)
+        self.validate_button.setObjectName("actionButton")
+
         self.save_button = QPushButton(_("dialogs.save"))
+        self.save_button.setObjectName("actionButton")
         self.save_button.clicked.connect(self._on_save)
         self.save_button.setDefault(True)
         button_layout.addWidget(self.save_button)
 
         self.cancel_button = QPushButton(_("dialogs.cancel"))
+        self.cancel_button.setObjectName("cancelButton")
         self.cancel_button.clicked.connect(self.reject)
         button_layout.addWidget(self.cancel_button)
 
         layout.addLayout(button_layout)
+
+        # Apply button styles
+        self._apply_button_styles()
+
+    def _apply_button_styles(self) -> None:
+        """Apply consistent button styles."""
+        action_style = """
+            QPushButton#actionButton {
+                background-color: #FF6A3D;
+                color: #000000;
+                border: none;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-weight: 600;
+                min-width: 80px;
+            }
+            QPushButton#actionButton:hover {
+                background-color: #FF8560;
+            }
+            QPushButton#actionButton:pressed {
+                background-color: #E55A2D;
+            }
+            QPushButton#actionButton:disabled {
+                background-color: #666666;
+                color: #999999;
+            }
+            QPushButton#cancelButton {
+                background-color: #2A2A2A;
+                color: #FFFFFF;
+                border: 1px solid #444444;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-weight: 600;
+                min-width: 80px;
+            }
+            QPushButton#cancelButton:hover {
+                background-color: #3A3A3A;
+                border-color: #555555;
+            }
+            QPushButton#cancelButton:pressed {
+                background-color: #1A1A1A;
+            }
+        """
+        self.setStyleSheet(action_style)
+
+    def _refresh_price(self) -> None:
+        """Fetch and display the current market price."""
+        if not self.is_edit or not self.ticker:
+            return
+
+        symbol = self.ticker.get("symbol", "")
+        if not symbol:
+            return
+
+        self.price_label.setText("Loading...")
+
+        # Force UI update
+        from PyQt6.QtCore import QCoreApplication
+        QCoreApplication.processEvents()
+
+        try:
+            from stockalert.api.finnhub import FinnhubProvider
+            import os
+            from dotenv import load_dotenv
+            from pathlib import Path
+
+            # Load API key
+            app_dir = Path(__file__).resolve().parent.parent.parent.parent
+            load_dotenv(app_dir / ".env")
+            api_key = os.environ.get("FINNHUB_API_KEY", "")
+
+            if api_key:
+                provider = FinnhubProvider(api_key=api_key)
+                price = provider.get_price(symbol)
+                if price is not None:
+                    self._current_price = price
+                    self.price_label.setText(f"${price:.2f}")
+                    self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #00AA00;")
+                else:
+                    self.price_label.setText("N/A")
+                    self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #888888;")
+            else:
+                self.price_label.setText("No API key")
+                self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #888888;")
+
+        except Exception as e:
+            logger.exception("Failed to fetch price")
+            self.price_label.setText("Error")
+            self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #FF0000;")
 
     def _load_ticker(self, ticker: dict[str, Any]) -> None:
         """Load ticker data into the form."""
@@ -196,13 +310,27 @@ class TickerDialog(QDialog):
                         self.name_edit.setText(company_name)
                     self.status_label.setText(_("tickers.valid_symbol"))
                     self.status_label.setStyleSheet("color: green;")
+
+                    # Fetch current price for valid symbol
+                    price = provider.get_price(symbol)
+                    if price is not None:
+                        self._current_price = price
+                        self.price_label.setText(f"${price:.2f}")
+                        self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #00AA00;")
+                    else:
+                        self.price_label.setText("N/A")
+                        self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #888888;")
                 else:
                     self.status_label.setText(_("tickers.invalid_symbol"))
                     self.status_label.setStyleSheet("color: red;")
+                    self.price_label.setText("--")
+                    self.price_label.setStyleSheet("font-size: 16px; font-weight: bold;")
             else:
                 # No API key - accept symbol but warn
                 self.status_label.setText(_("tickers.valid_symbol"))
                 self.status_label.setStyleSheet("color: orange;")
+                self.price_label.setText("No API key")
+                self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #888888;")
 
         except Exception as e:
             logger.exception("Symbol validation failed")

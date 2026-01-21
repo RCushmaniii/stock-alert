@@ -17,6 +17,36 @@ logger = logging.getLogger(__name__)
 
 # Service configuration
 SERVICE_NAME = "StockAlertService"
+APP_DATA_FOLDER = "StockAlert"
+
+
+def get_app_data_dir() -> Path:
+    """Get the application data directory for StockAlert.
+
+    Returns:
+        Path to %APPDATA%/StockAlert (created if doesn't exist)
+    """
+    if sys.platform == "win32":
+        app_data = Path(os.environ.get("APPDATA", ""))
+        if app_data.exists():
+            stockalert_dir = app_data / APP_DATA_FOLDER
+        else:
+            # Fallback to user home
+            stockalert_dir = Path.home() / ".stockalert"
+    else:
+        stockalert_dir = Path.home() / ".stockalert"
+
+    stockalert_dir.mkdir(parents=True, exist_ok=True)
+    return stockalert_dir
+
+
+def get_pid_file_path() -> Path:
+    """Get the path to the PID file.
+
+    Returns:
+        Path to the PID file in the app data directory.
+    """
+    return get_app_data_dir() / "stockalert.pid"
 SERVICE_DISPLAY_NAME = "StockAlert Monitoring Service"
 SERVICE_DESCRIPTION = (
     "Monitors stock prices and sends alerts via Windows notifications, "
@@ -371,7 +401,7 @@ def start_background_process() -> int:
         print(f"StockAlert monitoring started (PID: {process.pid})")
 
         # Save PID to file for later reference
-        pid_file = Path(__file__).resolve().parent.parent.parent / "stockalert.pid"
+        pid_file = get_pid_file_path()
         pid_file.write_text(str(process.pid))
 
         return process.pid
@@ -388,7 +418,7 @@ def stop_background_process() -> int:
     Returns:
         0 on success, 1 on failure.
     """
-    pid_file = Path(__file__).resolve().parent.parent.parent / "stockalert.pid"
+    pid_file = get_pid_file_path()
 
     if not pid_file.exists():
         print("No background process found (PID file missing)")
@@ -422,7 +452,7 @@ def get_background_process_status() -> dict:
     Returns:
         Dictionary with 'running' bool and optional 'pid' int.
     """
-    pid_file = Path(__file__).resolve().parent.parent.parent / "stockalert.pid"
+    pid_file = get_pid_file_path()
 
     if not pid_file.exists():
         return {"running": False}
