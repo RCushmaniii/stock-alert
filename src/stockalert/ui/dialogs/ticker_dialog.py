@@ -57,6 +57,7 @@ class TickerDialog(QDialog):
         self.ticker = ticker
         self.is_edit = ticker is not None
         self._current_price: float | None = None
+        self._company_profile: dict[str, Any] | None = None
 
         self._setup_ui()
         if ticker:
@@ -320,6 +321,12 @@ class TickerDialog(QDialog):
                     else:
                         self.price_label.setText("N/A")
                         self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #888888;")
+
+                    # Fetch company profile for additional data
+                    profile = provider.get_company_profile(symbol)
+                    if profile:
+                        self._company_profile = profile
+                        logger.info(f"Fetched profile for {symbol}: {profile.get('name')}")
                 else:
                     self.status_label.setText(_("tickers.invalid_symbol"))
                     self.status_label.setStyleSheet("color: red;")
@@ -395,13 +402,22 @@ class TickerDialog(QDialog):
                     enabled=enabled,
                 )
             else:
-                # Add new ticker
+                # Add new ticker with profile data if available
+                profile = self._company_profile or {}
                 self.config_manager.add_ticker(
                     symbol=symbol,
                     name=name,
                     high_threshold=high,
                     low_threshold=low,
                     enabled=enabled,
+                    logo=profile.get("logo", ""),
+                    industry=profile.get("finnhubIndustry", ""),
+                    market_cap=profile.get("marketCapitalization", 0.0),
+                    exchange=profile.get("exchange", ""),
+                    weburl=profile.get("weburl", ""),
+                    ipo=profile.get("ipo", ""),
+                    country=profile.get("country", ""),
+                    shares_outstanding=profile.get("shareOutstanding", 0.0),
                 )
 
             self.accept()

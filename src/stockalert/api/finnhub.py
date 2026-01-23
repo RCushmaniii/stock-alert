@@ -188,6 +188,97 @@ class FinnhubProvider(BaseProvider):
         except ProviderError:
             return []
 
+    def get_market_news(self, category: str = "general") -> list[dict[str, Any]]:
+        """Get latest market news.
+
+        Args:
+            category: News category - general, forex, crypto, or merger
+
+        Returns:
+            List of news articles with:
+                - category: News category
+                - datetime: Published time (UNIX timestamp)
+                - headline: News headline
+                - id: News ID
+                - image: Thumbnail image URL
+                - related: Related stocks mentioned
+                - source: News source
+                - summary: News summary
+                - url: URL to original article
+        """
+        try:
+            client = self._ensure_client()
+            news = self._make_request(client.general_news, category)
+            return news if news else []
+
+        except ProviderError:
+            return []
+
+    def get_company_news(
+        self, symbol: str, from_date: str, to_date: str
+    ) -> list[dict[str, Any]]:
+        """Get company news articles.
+
+        Args:
+            symbol: Stock ticker symbol
+            from_date: Start date in YYYY-MM-DD format
+            to_date: End date in YYYY-MM-DD format
+
+        Returns:
+            List of news articles with:
+                - category: News category
+                - datetime: Published time (UNIX timestamp)
+                - headline: News headline
+                - id: News ID
+                - image: Thumbnail image URL
+                - related: Related stocks mentioned
+                - source: News source
+                - summary: News summary
+                - url: URL to original article
+        """
+        try:
+            client = self._ensure_client()
+            news = self._make_request(
+                client.company_news, symbol.upper(), _from=from_date, to=to_date
+            )
+            return news if news else []
+
+        except ProviderError:
+            return []
+
+    def get_company_profile(self, symbol: str) -> dict[str, Any] | None:
+        """Get company profile data.
+
+        Args:
+            symbol: Stock ticker symbol
+
+        Returns:
+            Dictionary with company profile:
+                - country: Country of headquarters
+                - currency: Currency used in filings
+                - exchange: Listed exchange
+                - finnhubIndustry: Industry classification
+                - ipo: IPO date
+                - logo: Logo image URL
+                - marketCapitalization: Market cap in millions
+                - name: Company name
+                - phone: Company phone
+                - shareOutstanding: Shares outstanding in millions
+                - ticker: Ticker symbol
+                - weburl: Company website
+            Returns None if unavailable
+        """
+        try:
+            client = self._ensure_client()
+            profile = self._make_request(client.company_profile2, symbol=symbol.upper())
+
+            if profile and profile.get("name"):
+                return profile
+            return None
+
+        except ProviderError:
+            return None
+
     @property
     def name(self) -> str:
         """Get provider name."""

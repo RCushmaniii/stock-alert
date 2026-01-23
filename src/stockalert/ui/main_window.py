@@ -10,8 +10,9 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
-from PyQt6.QtCore import Qt, QUrl
-from PyQt6.QtGui import QCloseEvent, QDesktopServices, QIcon
+from PyQt6.QtCore import Qt, QUrl, QByteArray
+from PyQt6.QtGui import QCloseEvent, QDesktopServices, QIcon, QPixmap
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -37,6 +38,7 @@ from stockalert.i18n.translator import _
 from stockalert.ui.dialogs.profile_dialog import ProfileWidget
 from stockalert.ui.dialogs.settings_dialog import SettingsWidget
 from stockalert.ui.dialogs.ticker_dialog import TickerDialog
+from stockalert.ui.widgets.news_widget import NewsWidget
 
 if TYPE_CHECKING:
     from stockalert.core.config import ConfigManager
@@ -71,6 +73,10 @@ class MainWindow(QMainWindow):
         self.translator = translator
         self.on_settings_changed = on_settings_changed
         self._current_theme = "dark"
+        self._logo_cache: dict[str, QPixmap] = {}
+        self._network_manager = QNetworkAccessManager(self)
+        self._network_manager.finished.connect(self._on_logo_loaded)
+        self._pending_logos: dict[str, tuple[int, str]] = {}  # url -> (row, symbol)
 
         self._setup_ui()
         self._load_data()
@@ -145,6 +151,13 @@ class MainWindow(QMainWindow):
         # Tickers tab
         self.tickers_widget = self._create_tickers_tab()
         self.tabs.addTab(self.tickers_widget, _("tabs.tickers"))
+
+        # News tab
+        self.news_widget = NewsWidget(
+            config_manager=self.config_manager,
+            translator=self.translator,
+        )
+        self.tabs.addTab(self.news_widget, _("tabs.news"))
 
         # Help tab
         self.help_widget = self._create_help_tab()
@@ -335,12 +348,15 @@ class MainWindow(QMainWindow):
         # Ticker table with checkbox column
         self.ticker_table = QTableWidget()
         self.ticker_table.setObjectName("tickerTable")
-        self.ticker_table.setColumnCount(7)
+        self.ticker_table.setColumnCount(10)
 
         self.ticker_table.setHorizontalHeaderLabels([
-            "",  # Checkbox column - will add widget
+            "",  # Checkbox column
+            "",  # Logo column
             _("tickers.symbol"),
             _("tickers.name"),
+            _("tickers.industry"),
+            _("tickers.market_cap"),
             _("tickers.high_threshold"),
             _("tickers.low_threshold"),
             _("tickers.last_price"),
@@ -349,14 +365,18 @@ class MainWindow(QMainWindow):
 
         # Set up header
         header = self.ticker_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # Checkbox
         self.ticker_table.setColumnWidth(0, 50)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Logo
+        self.ticker_table.setColumnWidth(1, 45)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Symbol
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Name
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Industry
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Market Cap
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # High
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)  # Low
+        header.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)  # Price
+        header.setSectionResizeMode(9, QHeaderView.ResizeMode.ResizeToContents)  # Enabled
 
         # Set the first column header to have a clickable select all indicator
         self.ticker_table.horizontalHeaderItem(0).setText("☐")
@@ -433,7 +453,7 @@ class MainWindow(QMainWindow):
             if checkbox_widget:
                 checkbox = checkbox_widget.findChild(QCheckBox)
                 if checkbox and checkbox.isChecked():
-                    item = self.ticker_table.item(row, 1)
+                    item = self.ticker_table.item(row, 2)  # Column 2 is symbol
                     if item:
                         selected.append(item.text())
         return selected
@@ -1594,6 +1614,88 @@ QDialog {
             self.theme_btn.setText("🌙")
             self.theme_btn.setToolTip(_("theme.dark"))
 
+    def _format_market_cap(self, market_cap: float) -> tuple[str, str]:
+        """Format market cap value and return category.
+
+        Args:
+            market_cap: Market cap in millions
+
+        Returns:
+            Tuple of (formatted string, category)
+        """
+        if market_cap <= 0:
+            return ("--", "")
+
+        # market_cap is already in millions from Finnhub
+        if market_cap >= 200000:  # $200B+
+            return (f"${market_cap / 1000:.0f}B", "Mega")
+        elif market_cap >= 10000:  # $10B+
+            return (f"${market_cap / 1000:.1f}B", "Large")
+        elif market_cap >= 2000:  # $2B+
+            return (f"${market_cap / 1000:.1f}B", "Mid")
+        elif market_cap >= 300:  # $300M+
+            return (f"${market_cap:.0f}M", "Small")
+        else:
+            return (f"${market_cap:.0f}M", "Micro")
+
+    def _load_logo(self, url: str, row: int, symbol: str) -> None:
+        """Asynchronously load a company logo.
+
+        Args:
+            url: Logo image URL
+            row: Table row to update
+            symbol: Stock symbol for tracking
+        """
+        if not url:
+            return
+
+        # Check cache first
+        if url in self._logo_cache:
+            self._set_logo_cell(row, self._logo_cache[url])
+            return
+
+        # Track pending request
+        self._pending_logos[url] = (row, symbol)
+
+        # Start async download
+        request = QNetworkRequest(QUrl(url))
+        self._network_manager.get(request)
+
+    def _on_logo_loaded(self, reply: QNetworkReply) -> None:
+        """Handle logo download completion."""
+        url = reply.url().toString()
+
+        if url in self._pending_logos:
+            row, symbol = self._pending_logos.pop(url)
+
+            if reply.error() == QNetworkReply.NetworkError.NoError:
+                data = reply.readAll()
+                pixmap = QPixmap()
+                pixmap.loadFromData(data)
+
+                if not pixmap.isNull():
+                    # Scale to fit cell
+                    scaled = pixmap.scaled(
+                        32, 32,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation
+                    )
+                    self._logo_cache[url] = scaled
+                    self._set_logo_cell(row, scaled)
+
+        reply.deleteLater()
+
+    def _set_logo_cell(self, row: int, pixmap: QPixmap) -> None:
+        """Set the logo pixmap in a table cell."""
+        if row >= self.ticker_table.rowCount():
+            return
+
+        label = QLabel()
+        label.setPixmap(pixmap)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setStyleSheet("background-color: transparent;")
+        self.ticker_table.setCellWidget(row, 1, label)
+
     def _load_data(self) -> None:
         """Load data into the UI."""
         self._refresh_ticker_table()
@@ -1604,7 +1706,7 @@ QDialog {
         self.ticker_table.setRowCount(len(tickers))
 
         for row, ticker in enumerate(tickers):
-            # Checkbox column - center checkbox in cell
+            # Column 0: Checkbox
             checkbox_widget = QWidget()
             checkbox_widget.setStyleSheet("background-color: transparent;")
             checkbox_layout = QHBoxLayout(checkbox_widget)
@@ -1639,42 +1741,72 @@ QDialog {
             checkbox_layout.addStretch()
             self.ticker_table.setCellWidget(row, 0, checkbox_widget)
 
-            # Symbol
-            symbol_item = QTableWidgetItem(ticker.get("symbol", ""))
-            symbol_item.setFlags(symbol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.ticker_table.setItem(row, 1, symbol_item)
+            # Column 1: Logo (async load)
+            logo_url = ticker.get("logo", "")
+            symbol = ticker.get("symbol", "")
+            if logo_url:
+                self._load_logo(logo_url, row, symbol)
+            else:
+                # Placeholder for missing logo
+                placeholder = QLabel("📈")
+                placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                placeholder.setStyleSheet("background-color: transparent; font-size: 18px;")
+                self.ticker_table.setCellWidget(row, 1, placeholder)
 
-            # Name
+            # Column 2: Symbol
+            symbol_item = QTableWidgetItem(symbol)
+            symbol_item.setFlags(symbol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.ticker_table.setItem(row, 2, symbol_item)
+
+            # Column 3: Name
             name_item = QTableWidgetItem(ticker.get("name", ""))
             name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.ticker_table.setItem(row, 2, name_item)
+            self.ticker_table.setItem(row, 3, name_item)
 
-            # High threshold
+            # Column 4: Industry
+            industry = ticker.get("industry", "")
+            industry_item = QTableWidgetItem(industry if industry else "--")
+            industry_item.setFlags(industry_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.ticker_table.setItem(row, 4, industry_item)
+
+            # Column 5: Market Cap with category badge
+            market_cap = ticker.get("market_cap", 0)
+            cap_str, cap_category = self._format_market_cap(market_cap)
+            if cap_category:
+                cap_display = f"{cap_str} ({cap_category})"
+            else:
+                cap_display = cap_str
+            cap_item = QTableWidgetItem(cap_display)
+            cap_item.setFlags(cap_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            cap_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.ticker_table.setItem(row, 5, cap_item)
+
+            # Column 6: High threshold
             high = ticker.get("high_threshold", 0)
             high_item = QTableWidgetItem(f"${high:.2f}")
             high_item.setFlags(high_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             high_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.ticker_table.setItem(row, 3, high_item)
+            self.ticker_table.setItem(row, 6, high_item)
 
-            # Low threshold
+            # Column 7: Low threshold
             low = ticker.get("low_threshold", 0)
             low_item = QTableWidgetItem(f"${low:.2f}")
             low_item.setFlags(low_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             low_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.ticker_table.setItem(row, 4, low_item)
+            self.ticker_table.setItem(row, 7, low_item)
 
-            # Last price (placeholder)
+            # Column 8: Last price (placeholder)
             price_item = QTableWidgetItem("--")
             price_item.setFlags(price_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             price_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.ticker_table.setItem(row, 5, price_item)
+            self.ticker_table.setItem(row, 8, price_item)
 
-            # Enabled
+            # Column 9: Enabled
             enabled = ticker.get("enabled", True)
             enabled_item = QTableWidgetItem("✓" if enabled else "✗")
             enabled_item.setFlags(enabled_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             enabled_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.ticker_table.setItem(row, 6, enabled_item)
+            self.ticker_table.setItem(row, 9, enabled_item)
 
         # Update button states and header
         self._update_action_buttons()
@@ -1691,7 +1823,7 @@ QDialog {
         """Get the symbol of the selected row."""
         row = self._get_selected_row()
         if row >= 0:
-            item = self.ticker_table.item(row, 1)  # Column 1 is now symbol
+            item = self.ticker_table.item(row, 2)  # Column 2 is symbol
             if item:
                 return item.text()
         return None

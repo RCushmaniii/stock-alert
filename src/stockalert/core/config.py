@@ -222,6 +222,14 @@ class ConfigManager:
         high_threshold: float,
         low_threshold: float,
         enabled: bool = True,
+        logo: str = "",
+        industry: str = "",
+        market_cap: float = 0.0,
+        exchange: str = "",
+        weburl: str = "",
+        ipo: str = "",
+        country: str = "",
+        shares_outstanding: float = 0.0,
     ) -> None:
         """Add a new ticker to configuration.
 
@@ -231,6 +239,14 @@ class ConfigManager:
             high_threshold: High price threshold
             low_threshold: Low price threshold
             enabled: Whether monitoring is enabled
+            logo: Company logo URL
+            industry: Finnhub industry classification
+            market_cap: Market capitalization in millions
+            exchange: Listed exchange
+            weburl: Company website URL
+            ipo: IPO date (YYYY-MM-DD)
+            country: Country of headquarters
+            shares_outstanding: Shares outstanding in millions
 
         Raises:
             ConfigError: If ticker already exists
@@ -247,6 +263,14 @@ class ConfigManager:
                     "high_threshold": high_threshold,
                     "low_threshold": low_threshold,
                     "enabled": enabled,
+                    "logo": logo,
+                    "industry": industry,
+                    "market_cap": market_cap,
+                    "exchange": exchange,
+                    "weburl": weburl,
+                    "ipo": ipo,
+                    "country": country,
+                    "shares_outstanding": shares_outstanding,
                 }
             )
             self._save()
