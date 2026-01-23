@@ -277,7 +277,7 @@ class MainWindow(QMainWindow):
         self.website_btn.setObjectName("footerLink")
         self.website_btn.setFlat(True)
         self.website_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.website_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://rcsoftware.com")))
+        self.website_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://ai-stock-alert-website.netlify.app/")))
         footer_layout.addWidget(self.website_btn)
 
         separator1 = QLabel("|")
@@ -288,7 +288,7 @@ class MainWindow(QMainWindow):
         self.privacy_btn.setObjectName("footerLink")
         self.privacy_btn.setFlat(True)
         self.privacy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.privacy_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://rcsoftware.com/privacy")))
+        self.privacy_btn.clicked.connect(self._open_privacy_link)
         footer_layout.addWidget(self.privacy_btn)
 
         separator2 = QLabel("|")
@@ -299,7 +299,7 @@ class MainWindow(QMainWindow):
         self.terms_btn.setObjectName("footerLink")
         self.terms_btn.setFlat(True)
         self.terms_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.terms_btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://rcsoftware.com/terms")))
+        self.terms_btn.clicked.connect(self._open_terms_link)
         footer_layout.addWidget(self.terms_btn)
 
         footer_outer.addWidget(footer_inner)
@@ -1651,7 +1651,7 @@ QDialog {
 
         # Check cache first
         if url in self._logo_cache:
-            self._set_logo_cell(row, self._logo_cache[url])
+            self._set_logo_cell(row, self._logo_cache[url], symbol)
             return
 
         # Track pending request
@@ -1681,20 +1681,62 @@ QDialog {
                         Qt.TransformationMode.SmoothTransformation
                     )
                     self._logo_cache[url] = scaled
-                    self._set_logo_cell(row, scaled)
+                    self._set_logo_cell(row, scaled, symbol)
 
         reply.deleteLater()
 
-    def _set_logo_cell(self, row: int, pixmap: QPixmap) -> None:
-        """Set the logo pixmap in a table cell."""
+    def _set_logo_cell(self, row: int, pixmap: QPixmap, symbol: str = "") -> None:
+        """Set the logo pixmap in a table cell - clickable to open chart."""
         if row >= self.ticker_table.rowCount():
             return
 
-        label = QLabel()
-        label.setPixmap(pixmap)
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet("background-color: transparent;")
-        self.ticker_table.setCellWidget(row, 1, label)
+        # Get symbol from the row if not provided
+        if not symbol:
+            item = self.ticker_table.item(row, 2)
+            symbol = item.text() if item else ""
+
+        btn = QPushButton()
+        btn.setIcon(QIcon(pixmap))
+        btn.setIconSize(pixmap.size())
+        btn.setFlat(True)
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.setToolTip(f"View {symbol} chart")
+        btn.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                padding: 2px;
+            }
+            QPushButton:hover {
+                background-color: #2A2A2A;
+                border-radius: 4px;
+            }
+        """)
+        btn.clicked.connect(lambda checked, s=symbol: self._open_chart(s))
+        self.ticker_table.setCellWidget(row, 1, btn)
+
+    def _open_chart(self, symbol: str) -> None:
+        """Open stock chart in browser."""
+        # Use TradingView chart URL
+        chart_url = f"https://www.tradingview.com/chart/?symbol={symbol}"
+        QDesktopServices.openUrl(QUrl(chart_url))
+
+    def _get_website_lang_prefix(self) -> str:
+        """Get the language prefix for website URLs."""
+        lang = self.config_manager.get("settings.language", "en")
+        return "es" if lang == "es" else "en"
+
+    def _open_privacy_link(self) -> None:
+        """Open privacy policy in browser with correct language."""
+        lang = self._get_website_lang_prefix()
+        url = f"https://ai-stock-alert-website.netlify.app/{lang}/privacy"
+        QDesktopServices.openUrl(QUrl(url))
+
+    def _open_terms_link(self) -> None:
+        """Open terms of service in browser with correct language."""
+        lang = self._get_website_lang_prefix()
+        url = f"https://ai-stock-alert-website.netlify.app/{lang}/terms"
+        QDesktopServices.openUrl(QUrl(url))
 
     def _load_data(self) -> None:
         """Load data into the UI."""
@@ -1741,16 +1783,29 @@ QDialog {
             checkbox_layout.addStretch()
             self.ticker_table.setCellWidget(row, 0, checkbox_widget)
 
-            # Column 1: Logo (async load)
+            # Column 1: Logo (async load) - clickable to open chart
             logo_url = ticker.get("logo", "")
             symbol = ticker.get("symbol", "")
             if logo_url:
                 self._load_logo(logo_url, row, symbol)
             else:
-                # Placeholder for missing logo
-                placeholder = QLabel("📈")
-                placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                placeholder.setStyleSheet("background-color: transparent; font-size: 18px;")
+                # Placeholder for missing logo - clickable to open chart
+                placeholder = QPushButton("📈")
+                placeholder.setFlat(True)
+                placeholder.setCursor(Qt.CursorShape.PointingHandCursor)
+                placeholder.setToolTip(f"View {symbol} chart")
+                placeholder.setStyleSheet("""
+                    QPushButton {
+                        background-color: transparent;
+                        font-size: 18px;
+                        border: none;
+                    }
+                    QPushButton:hover {
+                        background-color: #2A2A2A;
+                        border-radius: 4px;
+                    }
+                """)
+                placeholder.clicked.connect(lambda checked, s=symbol: self._open_chart(s))
                 self.ticker_table.setCellWidget(row, 1, placeholder)
 
             # Column 2: Symbol

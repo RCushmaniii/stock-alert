@@ -93,10 +93,12 @@ class NewsCard(QFrame):
     def __init__(
         self,
         article: dict[str, Any],
+        show_symbol_badge: bool = True,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.article = article
+        self.show_symbol_badge = show_symbol_badge
         self.setObjectName("newsCard")
         self._setup_ui()
 
@@ -129,9 +131,9 @@ class NewsCard(QFrame):
         content_layout = QVBoxLayout()
         content_layout.setSpacing(4)
 
-        # Symbol badge (if company news)
+        # Symbol badge (if company news and badge enabled)
         symbol = self.article.get("_symbol")
-        if symbol:
+        if symbol and self.show_symbol_badge:
             badge = QLabel(symbol)
             badge.setObjectName("symbolBadge")
             badge.setStyleSheet("""
@@ -235,13 +237,14 @@ class NewsWidget(QWidget):
         # Header with filter
         header_layout = QHBoxLayout()
 
-        title = QLabel(_("news.title"))
-        title.setObjectName("sectionTitle")
-        header_layout.addWidget(title)
+        # Dynamic title that updates based on filter
+        self.title_label = QLabel(_("news.title") + " - " + _("news.my_stocks"))
+        self.title_label.setObjectName("sectionTitle")
+        header_layout.addWidget(self.title_label)
 
         header_layout.addStretch()
 
-        # News type filter
+        # News type filter with dropdown arrow
         self.filter_combo = QComboBox()
         self.filter_combo.addItem(_("news.my_stocks"), "stocks")
         self.filter_combo.addItem(_("news.general"), "general")
@@ -255,18 +258,28 @@ class NewsWidget(QWidget):
                 color: #FFFFFF;
                 border: 1px solid #444444;
                 border-radius: 6px;
-                padding: 6px 12px;
+                padding: 6px 28px 6px 12px;
                 min-width: 120px;
             }
             QComboBox:hover {
                 border-color: #FF6A3D;
             }
             QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 24px;
                 border: none;
             }
             QComboBox::down-arrow {
-                image: none;
+                width: 12px;
+                height: 12px;
                 border: none;
+                border-left: 2px solid #888888;
+                border-bottom: 2px solid #888888;
+                transform: rotate(-45deg);
+            }
+            QComboBox:hover::down-arrow {
+                border-color: #FF6A3D;
             }
         """)
         header_layout.addWidget(self.filter_combo)
@@ -314,6 +327,9 @@ class NewsWidget(QWidget):
 
     def _on_filter_changed(self, index: int) -> None:
         """Handle filter change."""
+        # Update title based on selection
+        filter_text = self.filter_combo.currentText()
+        self.title_label.setText(_("news.title") + " - " + filter_text)
         self._load_news()
 
     def _load_news(self) -> None:
@@ -342,11 +358,18 @@ class NewsWidget(QWidget):
 
         # Determine what to fetch
         filter_value = self.filter_combo.currentData()
+        self._current_filter = filter_value
+        self._ticker_names: dict[str, str] = {}
 
         if filter_value == "stocks":
             # Fetch news for monitored stocks
             tickers = self.config_manager.get_tickers()
-            symbols = [t["symbol"] for t in tickers if t.get("enabled", True)]
+            symbols = []
+            for t in tickers:
+                if t.get("enabled", True):
+                    symbol = t["symbol"]
+                    symbols.append(symbol)
+                    self._ticker_names[symbol] = t.get("name", symbol)
             if not symbols:
                 self.status_label.setText(_("news.no_stocks"))
                 self.refresh_btn.setEnabled(True)
@@ -370,17 +393,61 @@ class NewsWidget(QWidget):
             self.status_label.show()
             return
 
+        # Group by ticker if viewing "My Stocks"
+        if self._current_filter == "stocks":
+            self._display_grouped_news(articles)
+        else:
+            self._display_flat_news(articles)
+
+        # Add spacer at end
+        self.news_layout.addStretch()
+
+    def _display_flat_news(self, articles: list[dict[str, Any]]) -> None:
+        """Display news in a flat list."""
         for article in articles:
             card = NewsCard(article)
             self.news_layout.addWidget(card)
 
-            # Load thumbnail if available
             image_url = article.get("image")
             if image_url:
                 self._load_thumbnail(image_url, card)
 
-        # Add spacer at end
-        self.news_layout.addStretch()
+    def _display_grouped_news(self, articles: list[dict[str, Any]]) -> None:
+        """Display news grouped by ticker symbol."""
+        # Group articles by symbol
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for article in articles:
+            symbol = article.get("_symbol", "Other")
+            if symbol not in grouped:
+                grouped[symbol] = []
+            grouped[symbol].append(article)
+
+        # Display each group with a header
+        for symbol in grouped:
+            # Create section header
+            company_name = self._ticker_names.get(symbol, symbol)
+            header = QLabel(f"{symbol} - {company_name}")
+            header.setObjectName("newsGroupHeader")
+            header.setStyleSheet("""
+                QLabel#newsGroupHeader {
+                    font-size: 16px;
+                    font-weight: bold;
+                    color: #FF6A3D;
+                    padding: 16px 0 8px 0;
+                    border-bottom: 1px solid #333333;
+                    margin-bottom: 8px;
+                }
+            """)
+            self.news_layout.addWidget(header)
+
+            # Add articles for this group
+            for article in grouped[symbol][:5]:  # Limit to 5 per stock
+                card = NewsCard(article, show_symbol_badge=False)
+                self.news_layout.addWidget(card)
+
+                image_url = article.get("image")
+                if image_url:
+                    self._load_thumbnail(image_url, card)
 
     def _on_news_error(self, error: str) -> None:
         """Handle news fetch error."""
