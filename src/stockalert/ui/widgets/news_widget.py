@@ -234,13 +234,15 @@ class NewsWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
 
-        # Header with filter
+        # Header with filter - all items vertically centered
         header_layout = QHBoxLayout()
+        header_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        header_layout.setSpacing(12)
 
         # Dynamic title that updates based on filter
         self.title_label = QLabel(_("news.title") + " - " + _("news.my_stocks"))
         self.title_label.setObjectName("sectionTitle")
-        header_layout.addWidget(self.title_label)
+        header_layout.addWidget(self.title_label, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         header_layout.addStretch()
 
@@ -258,35 +260,49 @@ class NewsWidget(QWidget):
                 color: #FFFFFF;
                 border: 1px solid #444444;
                 border-radius: 6px;
-                padding: 6px 28px 6px 12px;
+                padding: 6px 12px;
+                padding-right: 35px;
                 min-width: 120px;
             }
             QComboBox:hover {
                 border-color: #FF6A3D;
             }
             QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: top right;
-                width: 24px;
+                subcontrol-origin: border;
+                subcontrol-position: center right;
+                width: 30px;
+                height: 100%;
+                background-color: #FF6A3D;
+                border-top-right-radius: 5px;
+                border-bottom-right-radius: 5px;
                 border: none;
             }
             QComboBox::down-arrow {
-                width: 12px;
-                height: 12px;
-                border: none;
-                border-left: 2px solid #888888;
-                border-bottom: 2px solid #888888;
-                transform: rotate(-45deg);
+                image: none;
+                width: 0;
+                height: 0;
+                border-left: 6px solid transparent;
+                border-right: 6px solid transparent;
+                border-top: 8px solid #FFFFFF;
             }
-            QComboBox:hover::down-arrow {
-                border-color: #FF6A3D;
+            QComboBox:hover::drop-down {
+                background-color: #FF8560;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #2A2A2A;
+                color: #FFFFFF;
+                selection-background-color: #FF6A3D;
+                selection-color: #000000;
+                border: 1px solid #444444;
             }
         """)
-        header_layout.addWidget(self.filter_combo)
+        self.filter_combo.setFixedHeight(36)
+        header_layout.addWidget(self.filter_combo, alignment=Qt.AlignmentFlag.AlignVCenter)
 
-        # Refresh button
+        # Refresh button - same height as combo for alignment
         self.refresh_btn = QPushButton(_("news.refresh"))
         self.refresh_btn.setObjectName("actionButton")
+        self.refresh_btn.setFixedHeight(36)
         self.refresh_btn.clicked.connect(self._load_news)
         self.refresh_btn.setStyleSheet("""
             QPushButton#actionButton {
@@ -294,14 +310,14 @@ class NewsWidget(QWidget):
                 color: #000000;
                 border: none;
                 border-radius: 6px;
-                padding: 8px 16px;
+                padding: 0px 16px;
                 font-weight: 600;
             }
             QPushButton#actionButton:hover {
                 background-color: #FF8560;
             }
         """)
-        header_layout.addWidget(self.refresh_btn)
+        header_layout.addWidget(self.refresh_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         layout.addLayout(header_layout)
 

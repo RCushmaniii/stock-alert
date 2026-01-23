@@ -137,7 +137,10 @@
     "delete_success": "¡Acción eliminada exitosamente!",
     "no_selection": "Por favor seleccione una acción primero",
     "current_price": "Precio Actual",
-    "refresh_price": "Actualizar"
+    "refresh_price": "Actualizar",
+    "refresh_profiles": "Actualizar Datos",
+    "refreshing_profiles": "Actualizando...",
+    "profiles_refreshed": "Datos de perfil actualizados para {count} acciones"
   },
   "alerts": {
     "high": {

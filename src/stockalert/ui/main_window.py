@@ -343,6 +343,11 @@ class MainWindow(QMainWindow):
         self.toggle_button.clicked.connect(self._on_toggle_ticker)
         header_layout.addWidget(self.toggle_button)
 
+        self.refresh_profiles_button = QPushButton(_("tickers.refresh_profiles"))
+        self.refresh_profiles_button.setObjectName("actionButton")
+        self.refresh_profiles_button.clicked.connect(self._on_refresh_profiles)
+        header_layout.addWidget(self.refresh_profiles_button)
+
         layout.addLayout(header_layout)
 
         # Ticker table with checkbox column
@@ -1975,6 +1980,62 @@ QDialog {
         if self.on_settings_changed:
             self.on_settings_changed()
 
+    def _on_refresh_profiles(self) -> None:
+        """Refresh company profile data for all tickers."""
+        from stockalert.api.finnhub import FinnhubProvider
+
+        try:
+            provider = FinnhubProvider()
+        except Exception as e:
+            logger.exception("Failed to initialize Finnhub provider")
+            QMessageBox.warning(
+                self,
+                _("errors.title"),
+                _("errors.no_api_key"),
+            )
+            return
+
+        # Disable button and show loading state
+        self.refresh_profiles_button.setEnabled(False)
+        self.refresh_profiles_button.setText(_("tickers.refreshing_profiles"))
+        QApplication.processEvents()
+
+        tickers = self.config_manager.get_tickers()
+        updated_count = 0
+
+        for ticker in tickers:
+            symbol = ticker["symbol"]
+            try:
+                profile = provider.get_company_profile(symbol)
+                if profile:
+                    self.config_manager.update_ticker(
+                        symbol,
+                        logo=profile.get("logo", ""),
+                        industry=profile.get("finnhubIndustry", ""),
+                        market_cap=profile.get("marketCapitalization", 0.0),
+                        exchange=profile.get("exchange", ""),
+                        weburl=profile.get("weburl", ""),
+                        ipo=profile.get("ipo", ""),
+                        country=profile.get("country", ""),
+                        shares_outstanding=profile.get("shareOutstanding", 0.0),
+                    )
+                    updated_count += 1
+                    logger.info(f"Updated profile for {symbol}")
+            except Exception as e:
+                logger.warning(f"Failed to fetch profile for {symbol}: {e}")
+
+        # Restore button state
+        self.refresh_profiles_button.setEnabled(True)
+        self.refresh_profiles_button.setText(_("tickers.refresh_profiles"))
+
+        # Refresh table to show new data
+        self._refresh_ticker_table()
+
+        # Show success message
+        self.status_bar.showMessage(
+            _("tickers.profiles_refreshed", count=updated_count)
+        )
+
     def _on_settings_saved(self) -> None:
         """Handle settings saved event."""
         self.status_bar.showMessage(_("settings.saved"))
@@ -2021,6 +2082,7 @@ QDialog {
         self.edit_button.setText(_("tickers.edit"))
         self.delete_button.setText(_("tickers.delete"))
         self.toggle_button.setText(_("tickers.toggle"))
+        self.refresh_profiles_button.setText(_("tickers.refresh_profiles"))
 
     def update_ticker_price(self, symbol: str, price: float | None) -> None:
         """Update the displayed price for a ticker.

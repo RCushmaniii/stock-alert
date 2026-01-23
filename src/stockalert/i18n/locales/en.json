@@ -137,7 +137,10 @@
     "delete_success": "Ticker deleted successfully!",
     "no_selection": "Please select a ticker first",
     "current_price": "Current Price",
-    "refresh_price": "Refresh"
+    "refresh_price": "Refresh",
+    "refresh_profiles": "Refresh Data",
+    "refreshing_profiles": "Refreshing...",
+    "profiles_refreshed": "Profile data refreshed for {count} tickers"
   },
   "alerts": {
     "high": {
