@@ -9,8 +9,30 @@ Usage:
 
 from __future__ import annotations
 
-import argparse
+import os
 import sys
+
+# Fix DLL search path on Windows to avoid conflicts with Git's OpenSSL
+if sys.platform == "win32":
+    # Add Anaconda's DLL directories before other paths
+    base_prefix = sys.base_prefix
+    dll_paths = [
+        os.path.join(base_prefix, "Library", "bin"),
+        os.path.join(base_prefix, "DLLs"),
+        base_prefix,
+    ]
+    # Prepend to PATH environment variable
+    current_path = os.environ.get("PATH", "")
+    new_paths = [p for p in dll_paths if os.path.exists(p)]
+    os.environ["PATH"] = ";".join(new_paths) + ";" + current_path
+    # Also use add_dll_directory for Python 3.8+
+    for dll_path in new_paths:
+        try:
+            os.add_dll_directory(dll_path)
+        except (OSError, AttributeError):
+            pass
+
+import argparse
 from pathlib import Path
 
 

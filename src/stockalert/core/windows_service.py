@@ -72,10 +72,13 @@ def _get_service_script() -> str:
 def _run_command(args: list[str], check: bool = True) -> subprocess.CompletedProcess:
     """Run a command and return the result."""
     logger.debug(f"Running command: {' '.join(args)}")
+    # Use CREATE_NO_WINDOW to prevent console window flashing on Windows
+    creationflags = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
     result = subprocess.run(
         args,
         capture_output=True,
         text=True,
+        creationflags=creationflags,
     )
     if check and result.returncode != 0:
         logger.error(f"Command failed: {result.stderr}")
@@ -429,7 +432,11 @@ def stop_background_process() -> int:
 
         # Try to terminate the process
         if sys.platform == "win32":
-            subprocess.run(["taskkill", "/PID", str(pid), "/F"], check=False)
+            subprocess.run(
+                ["taskkill", "/PID", str(pid), "/F"],
+                check=False,
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
         else:
             os.kill(pid, 15)  # SIGTERM
 
@@ -466,6 +473,7 @@ def get_background_process_status() -> dict:
                 ["tasklist", "/FI", f"PID eq {pid}"],
                 capture_output=True,
                 text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
             if str(pid) in result.stdout:
                 return {"running": True, "pid": pid}
