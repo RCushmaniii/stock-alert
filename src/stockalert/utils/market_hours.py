@@ -3,65 +3,192 @@ Market hours detection and US stock market holiday calendar.
 
 Provides utilities for checking if the US stock market is currently open,
 calculating time until market opens, and detecting market holidays.
+
+Holiday dates are generated algorithmically for any year.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta
+import logging
+from datetime import date, datetime, time, timedelta
+from functools import lru_cache
 
 import pytz
 
-# US Stock Market Holidays (2024-2027)
-# Source: NYSE Holiday Calendar
-US_MARKET_HOLIDAYS: frozenset[str] = frozenset([
-    # 2024
-    "2024-01-01",  # New Year's Day
-    "2024-01-15",  # Martin Luther King Jr. Day
-    "2024-02-19",  # Presidents' Day
-    "2024-03-29",  # Good Friday
-    "2024-05-27",  # Memorial Day
-    "2024-06-19",  # Juneteenth
-    "2024-07-04",  # Independence Day
-    "2024-09-02",  # Labor Day
-    "2024-11-28",  # Thanksgiving
-    "2024-12-25",  # Christmas
+logger = logging.getLogger(__name__)
 
-    # 2025
-    "2025-01-01",  # New Year's Day
-    "2025-01-20",  # Martin Luther King Jr. Day
-    "2025-02-17",  # Presidents' Day
-    "2025-04-18",  # Good Friday
-    "2025-05-26",  # Memorial Day
-    "2025-06-19",  # Juneteenth
-    "2025-07-04",  # Independence Day
-    "2025-09-01",  # Labor Day
-    "2025-11-27",  # Thanksgiving
-    "2025-12-25",  # Christmas
 
-    # 2026
-    "2026-01-01",  # New Year's Day
-    "2026-01-19",  # Martin Luther King Jr. Day
-    "2026-02-16",  # Presidents' Day
-    "2026-04-03",  # Good Friday
-    "2026-05-25",  # Memorial Day
-    "2026-06-19",  # Juneteenth
-    "2026-07-03",  # Independence Day (observed)
-    "2026-09-07",  # Labor Day
-    "2026-11-26",  # Thanksgiving
-    "2026-12-25",  # Christmas
+def _observe_holiday(d: date) -> date:
+    """Adjust holiday for weekend observance (NYSE rules).
 
-    # 2027
-    "2027-01-01",  # New Year's Day
-    "2027-01-18",  # Martin Luther King Jr. Day
-    "2027-02-15",  # Presidents' Day
-    "2027-03-26",  # Good Friday
-    "2027-05-31",  # Memorial Day
-    "2027-06-18",  # Juneteenth (observed)
-    "2027-07-05",  # Independence Day (observed)
-    "2027-09-06",  # Labor Day
-    "2027-11-25",  # Thanksgiving
-    "2027-12-24",  # Christmas (observed)
-])
+    If holiday falls on Saturday, observe on Friday.
+    If holiday falls on Sunday, observe on Monday.
+
+    Args:
+        d: The actual holiday date
+
+    Returns:
+        The observed holiday date
+    """
+    if d.weekday() == 5:  # Saturday
+        return d - timedelta(days=1)  # Observe on Friday
+    elif d.weekday() == 6:  # Sunday
+        return d + timedelta(days=1)  # Observe on Monday
+    return d
+
+
+def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
+    """Get the nth occurrence of a weekday in a month.
+
+    Args:
+        year: Year
+        month: Month (1-12)
+        weekday: Weekday (0=Monday, 6=Sunday)
+        n: Which occurrence (1=first, 2=second, etc.)
+
+    Returns:
+        The date of the nth weekday
+    """
+    first_day = date(year, month, 1)
+    # Find first occurrence of weekday
+    days_ahead = weekday - first_day.weekday()
+    if days_ahead < 0:
+        days_ahead += 7
+    first_occurrence = first_day + timedelta(days=days_ahead)
+    # Add weeks to get nth occurrence
+    return first_occurrence + timedelta(weeks=n - 1)
+
+
+def _last_weekday(year: int, month: int, weekday: int) -> date:
+    """Get the last occurrence of a weekday in a month.
+
+    Args:
+        year: Year
+        month: Month (1-12)
+        weekday: Weekday (0=Monday, 6=Sunday)
+
+    Returns:
+        The date of the last weekday
+    """
+    # Start from last day of month
+    if month == 12:
+        last_day = date(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        last_day = date(year, month + 1, 1) - timedelta(days=1)
+
+    # Find last occurrence of weekday
+    days_back = last_day.weekday() - weekday
+    if days_back < 0:
+        days_back += 7
+    return last_day - timedelta(days=days_back)
+
+
+def _easter_sunday(year: int) -> date:
+    """Calculate Easter Sunday using the Anonymous Gregorian algorithm.
+
+    Args:
+        year: Year to calculate Easter for
+
+    Returns:
+        Date of Easter Sunday
+    """
+    a = year % 19
+    b = year // 100
+    c = year % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    return date(year, month, day)
+
+
+@lru_cache(maxsize=20)
+def get_market_holidays_for_year(year: int) -> frozenset[str]:
+    """Generate all NYSE market holidays for a given year.
+
+    Args:
+        year: The year to generate holidays for
+
+    Returns:
+        Frozenset of holiday dates as "YYYY-MM-DD" strings
+    """
+    holidays = []
+
+    # New Year's Day (January 1, observed)
+    new_years = _observe_holiday(date(year, 1, 1))
+    holidays.append(new_years)
+
+    # Martin Luther King Jr. Day (3rd Monday in January)
+    mlk_day = _nth_weekday(year, 1, 0, 3)  # 0=Monday
+    holidays.append(mlk_day)
+
+    # Presidents' Day (3rd Monday in February)
+    presidents_day = _nth_weekday(year, 2, 0, 3)
+    holidays.append(presidents_day)
+
+    # Good Friday (Friday before Easter Sunday)
+    easter = _easter_sunday(year)
+    good_friday = easter - timedelta(days=2)
+    holidays.append(good_friday)
+
+    # Memorial Day (Last Monday in May)
+    memorial_day = _last_weekday(year, 5, 0)
+    holidays.append(memorial_day)
+
+    # Juneteenth (June 19, observed) - Federal holiday since 2021
+    juneteenth = _observe_holiday(date(year, 6, 19))
+    holidays.append(juneteenth)
+
+    # Independence Day (July 4, observed)
+    independence_day = _observe_holiday(date(year, 7, 4))
+    holidays.append(independence_day)
+
+    # Labor Day (1st Monday in September)
+    labor_day = _nth_weekday(year, 9, 0, 1)
+    holidays.append(labor_day)
+
+    # Thanksgiving (4th Thursday in November)
+    thanksgiving = _nth_weekday(year, 11, 3, 4)  # 3=Thursday
+    holidays.append(thanksgiving)
+
+    # Christmas Day (December 25, observed)
+    christmas = _observe_holiday(date(year, 12, 25))
+    holidays.append(christmas)
+
+    return frozenset(d.strftime("%Y-%m-%d") for d in holidays)
+
+
+def is_market_holiday_date(check_date: date) -> bool:
+    """Check if a specific date is a market holiday.
+
+    Args:
+        check_date: The date to check
+
+    Returns:
+        True if it's a market holiday
+    """
+    date_str = check_date.strftime("%Y-%m-%d")
+
+    # Check current year's holidays
+    year_holidays = get_market_holidays_for_year(check_date.year)
+    if date_str in year_holidays:
+        return True
+
+    # Check for observed New Year's from next year (when Jan 1 falls on Saturday)
+    # This affects Dec 31 of current year
+    if check_date.month == 12 and check_date.day == 31:
+        next_year_holidays = get_market_holidays_for_year(check_date.year + 1)
+        if date_str in next_year_holidays:
+            return True
+
+    return False
 
 
 class MarketHours:
@@ -107,20 +234,19 @@ class MarketHours:
         # Regular market hours only
         return self.MARKET_OPEN <= current_time < self.MARKET_CLOSE
 
-    def is_market_holiday(self, date: datetime | None = None) -> bool:
+    def is_market_holiday(self, dt: datetime | None = None) -> bool:
         """Check if a given date is a market holiday.
 
         Args:
-            date: datetime object (defaults to today in ET)
+            dt: datetime object (defaults to today in ET)
 
         Returns:
             True if it's a market holiday
         """
-        if date is None:
-            date = datetime.now(self.eastern)
+        if dt is None:
+            dt = datetime.now(self.eastern)
 
-        date_str = date.strftime("%Y-%m-%d")
-        return date_str in US_MARKET_HOLIDAYS
+        return is_market_holiday_date(dt.date())
 
     def seconds_until_market_open(self) -> int:
         """Calculate seconds until next market open.
@@ -230,6 +356,16 @@ def main() -> None:
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
         print(f"Time until market opens: {hours}h {minutes}m")
+
+    # Show holidays for current and next year
+    current_year = market.get_current_time_et().year
+    print(f"\n{current_year} Market Holidays:")
+    for holiday in sorted(get_market_holidays_for_year(current_year)):
+        print(f"  {holiday}")
+
+    print(f"\n{current_year + 1} Market Holidays:")
+    for holiday in sorted(get_market_holidays_for_year(current_year + 1)):
+        print(f"  {holiday}")
 
 
 if __name__ == "__main__":

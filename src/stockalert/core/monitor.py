@@ -34,6 +34,8 @@ class TickerState:
     last_price: float | None = None
     last_alert_time: float | None = None
     consecutive_failures: int = 0
+    first_check_done: bool = False  # Skip alert on first check to avoid price gap false alerts
+    auto_disabled: bool = False  # True if disabled due to repeated failures
 
 
 @dataclass
@@ -193,6 +195,10 @@ class StockMonitor:
 
     def _check_ticker(self, state: TickerState) -> None:
         """Check a single ticker's price against thresholds."""
+        # Skip if already auto-disabled
+        if state.auto_disabled:
+            return
+
         try:
             price = self.provider.get_price(state.symbol)
             self._stats.checks_performed += 1
@@ -200,11 +206,8 @@ class StockMonitor:
             if price is None:
                 state.consecutive_failures += 1
                 if state.consecutive_failures >= self.MAX_CONSECUTIVE_FAILURES:
-                    logger.warning(
-                        f"[{state.symbol}] Failed to fetch price "
-                        f"{self.MAX_CONSECUTIVE_FAILURES} consecutive times"
-                    )
-                    state.consecutive_failures = 0
+                    # Auto-disable the ticker and notify user
+                    self._auto_disable_ticker(state)
                 return
 
             # Reset failure counter on success
@@ -220,8 +223,61 @@ class StockMonitor:
             logger.exception(f"Error checking {state.symbol}: {e}")
             self._stats.api_errors += 1
 
+    def _auto_disable_ticker(self, state: TickerState) -> None:
+        """Auto-disable a ticker after repeated failures.
+
+        Args:
+            state: The ticker state to disable
+        """
+        state.auto_disabled = True
+        state.enabled = False
+        state.consecutive_failures = 0
+
+        logger.warning(
+            f"[{state.symbol}] Auto-disabled after {self.MAX_CONSECUTIVE_FAILURES} "
+            f"consecutive failures. Stock may be delisted or symbol invalid."
+        )
+
+        # Update config to persist the disabled state
+        try:
+            self.config_manager.update_ticker(state.symbol, enabled=False)
+        except Exception as e:
+            logger.error(f"Failed to persist disabled state for {state.symbol}: {e}")
+
+        # Send notification to user about the auto-disable
+        try:
+            self.alert_manager.send_system_notification(
+                title=f"Ticker Disabled: {state.symbol}",
+                message=(
+                    f"{state.symbol} ({state.name}) has been automatically disabled "
+                    f"after {self.MAX_CONSECUTIVE_FAILURES} consecutive failures to "
+                    f"fetch price data.\n\n"
+                    f"This may indicate the stock is delisted, halted, or the "
+                    f"symbol is invalid. You can re-enable it in Settings if the "
+                    f"issue is resolved."
+                ),
+            )
+        except Exception as e:
+            logger.error(f"Failed to send auto-disable notification: {e}")
+
     def _check_thresholds(self, state: TickerState, price: float) -> None:
         """Check if price crosses any thresholds."""
+        # Skip alerting on first check to avoid false alerts from price gaps
+        # (e.g., stock already above threshold when first added)
+        if not state.first_check_done:
+            state.first_check_done = True
+            if price >= state.high_threshold:
+                logger.info(
+                    f"{state.symbol}: Skipping initial high alert "
+                    f"(${price:.2f} >= ${state.high_threshold:.2f}) - price gap protection"
+                )
+            elif price <= state.low_threshold:
+                logger.info(
+                    f"{state.symbol}: Skipping initial low alert "
+                    f"(${price:.2f} <= ${state.low_threshold:.2f}) - price gap protection"
+                )
+            return
+
         cooldown = self.config_manager.get("settings.cooldown", 300)
 
         # Check if we're in cooldown period

@@ -7,6 +7,7 @@ Provides UI for adding or editing stock ticker configurations.
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import Qt
@@ -24,6 +25,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from stockalert.core.tier_limits import can_add_ticker, get_max_tickers
 from stockalert.i18n.translator import _
 
 if TYPE_CHECKING:
@@ -221,14 +223,10 @@ class TickerDialog(QDialog):
 
         try:
             from stockalert.api.finnhub import FinnhubProvider
-            import os
-            from dotenv import load_dotenv
-            from pathlib import Path
+            from stockalert.core.api_key_manager import get_api_key
 
-            # Load API key
-            app_dir = Path(__file__).resolve().parent.parent.parent.parent
-            load_dotenv(app_dir / ".env")
-            api_key = os.environ.get("FINNHUB_API_KEY", "")
+            # Get API key from secure storage
+            api_key = get_api_key()
 
             if api_key:
                 provider = FinnhubProvider(api_key=api_key)
@@ -244,7 +242,7 @@ class TickerDialog(QDialog):
                 self.price_label.setText("No API key")
                 self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #888888;")
 
-        except Exception as e:
+        except Exception:
             logger.exception("Failed to fetch price")
             self.price_label.setText("Error")
             self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #FF0000;")
@@ -266,11 +264,44 @@ class TickerDialog(QDialog):
         # Clear validation status
         self.status_label.setText("")
 
+    def _validate_symbol_format(self, symbol: str) -> tuple[bool, str]:
+        """Validate stock symbol format before API lookup.
+
+        Args:
+            symbol: Stock symbol to validate
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not symbol:
+            return False, _("errors.symbol_required")
+
+        # Length check: 1-5 characters for most US stocks, up to 6 for some
+        if len(symbol) > 6:
+            return False, "Symbol too long (max 6 characters)"
+
+        # Format check: uppercase alphanumeric, may include . or - for special symbols
+        # Examples: AAPL, BRK.A, BRK.B, BF-A, BF-B
+        if not re.match(r"^[A-Z0-9][A-Z0-9.\-]{0,5}$", symbol):
+            return False, "Invalid symbol format (use uppercase letters/numbers)"
+
+        # Common typo patterns to warn about
+        if symbol.isdigit():
+            return False, "Symbol cannot be all numbers"
+
+        if symbol.startswith(".") or symbol.startswith("-"):
+            return False, "Symbol cannot start with . or -"
+
+        return True, ""
+
     def _validate_symbol(self) -> None:
         """Validate the entered symbol and auto-fill company name."""
         symbol = self.symbol_edit.text().strip().upper()
-        if not symbol:
-            self.status_label.setText(_("errors.symbol_required"))
+
+        # Basic format validation first (before API call)
+        is_valid, error_msg = self._validate_symbol_format(symbol)
+        if not is_valid:
+            self.status_label.setText(error_msg)
             self.status_label.setStyleSheet("color: red;")
             return
 
@@ -285,14 +316,10 @@ class TickerDialog(QDialog):
         try:
             # Try to validate with Finnhub API and get company name
             from stockalert.api.finnhub import FinnhubProvider
-            import os
-            from dotenv import load_dotenv
-            from pathlib import Path
+            from stockalert.core.api_key_manager import get_api_key
 
-            # Load API key
-            app_dir = Path(__file__).resolve().parent.parent.parent.parent
-            load_dotenv(app_dir / ".env")
-            api_key = os.environ.get("FINNHUB_API_KEY", "")
+            # Get API key from secure storage
+            api_key = get_api_key()
 
             if api_key:
                 provider = FinnhubProvider(api_key=api_key)
@@ -339,7 +366,7 @@ class TickerDialog(QDialog):
                 self.price_label.setText("No API key")
                 self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #888888;")
 
-        except Exception as e:
+        except Exception:
             logger.exception("Symbol validation failed")
             self.status_label.setText(_("tickers.invalid_symbol"))
             self.status_label.setStyleSheet("color: red;")
@@ -372,7 +399,56 @@ class TickerDialog(QDialog):
             if any(t["symbol"] == symbol for t in tickers):
                 errors.append(_("tickers.duplicate_symbol", symbol=symbol))
 
+            # Check ticker limit for free tier
+            if not can_add_ticker(len(tickers)):
+                max_tickers = get_max_tickers()
+                errors.append(_("tickers.limit_reached", limit=max_tickers))
+
         return errors
+
+    def _check_threshold_sanity(self) -> str | None:
+        """Check if thresholds are realistic compared to current price.
+
+        Returns:
+            Warning message if thresholds seem unrealistic, None otherwise
+        """
+        if self._current_price is None or self._current_price <= 0:
+            return None
+
+        high = self.high_spin.value()
+        low = self.low_spin.value()
+        price = self._current_price
+
+        warnings = []
+
+        # Warn if high threshold is more than 5x current price
+        if high > price * 5:
+            ratio = high / price
+            warnings.append(
+                f"High threshold (${high:.2f}) is {ratio:.1f}x the current price (${price:.2f})"
+            )
+
+        # Warn if low threshold is less than 20% of current price
+        if low < price * 0.2:
+            ratio = price / low
+            warnings.append(
+                f"Low threshold (${low:.2f}) is {ratio:.1f}x below the current price (${price:.2f})"
+            )
+
+        # Warn if thresholds are very close to current price (within 1%)
+        if abs(high - price) / price < 0.01:
+            warnings.append(
+                f"High threshold (${high:.2f}) is within 1% of current price - may trigger immediately"
+            )
+        if abs(low - price) / price < 0.01:
+            warnings.append(
+                f"Low threshold (${low:.2f}) is within 1% of current price - may trigger immediately"
+            )
+
+        if warnings:
+            return "\n".join(warnings) + "\n\nAre you sure you want to continue?"
+
+        return None
 
     def _on_save(self) -> None:
         """Handle save button click."""
@@ -384,6 +460,19 @@ class TickerDialog(QDialog):
                 "\n".join(errors),
             )
             return
+
+        # Check for unrealistic thresholds
+        sanity_warning = self._check_threshold_sanity()
+        if sanity_warning:
+            result = QMessageBox.warning(
+                self,
+                "Threshold Warning",
+                sanity_warning,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if result != QMessageBox.StandardButton.Yes:
+                return
 
         try:
             symbol = self.symbol_edit.text().strip().upper()

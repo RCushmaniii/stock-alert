@@ -8,10 +8,22 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+def _get_locales_dir() -> Path:
+    """Get the locales directory, handling both development and frozen exe."""
+    if getattr(sys, "frozen", False):
+        # Running as frozen exe (cx_Freeze)
+        exe_dir = Path(sys.executable).parent
+        return exe_dir / "lib" / "stockalert" / "i18n" / "locales"
+    else:
+        # Running from source
+        return Path(__file__).parent / "locales"
 
 # Global translator instance for shorthand access
 _translator: Translator | None = None
@@ -64,12 +76,13 @@ class Translator:
             default_language: Default language code
         """
         if locales_dir is None:
-            locales_dir = Path(__file__).parent / "locales"
+            locales_dir = _get_locales_dir()
         self.locales_dir = Path(locales_dir)
 
         self._translations: dict[str, dict[str, Any]] = {}
         self._current_language = default_language
         self._fallback_language = "en"
+        self._missing_keys: set[str] = set()  # Track missing keys to avoid duplicate warnings
 
         self._load_all_languages()
         self.set_language(default_language)
@@ -154,7 +167,10 @@ class Translator:
             value = self._get_nested(self._fallback_language, key)
 
         if value is None:
-            logger.debug(f"Translation not found: {key}")
+            # Log warning only once per missing key to avoid log spam
+            if key not in self._missing_keys:
+                self._missing_keys.add(key)
+                logger.warning(f"Missing translation key: '{key}' (language: {self._current_language})")
             return key
 
         # Apply string formatting if kwargs provided
@@ -208,5 +224,19 @@ class Translator:
     def reload(self) -> None:
         """Reload all translations from disk."""
         self._translations.clear()
+        self._missing_keys.clear()
         self._load_all_languages()
         logger.info("Translations reloaded")
+
+    @property
+    def missing_keys(self) -> set[str]:
+        """Get all translation keys that were requested but not found.
+
+        Returns:
+            Set of missing translation keys
+        """
+        return self._missing_keys.copy()
+
+    def clear_missing_keys(self) -> None:
+        """Clear the set of missing translation keys."""
+        self._missing_keys.clear()

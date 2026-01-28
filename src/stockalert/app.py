@@ -74,11 +74,9 @@ class StockAlertApp:
         self.config_path = config_path or self.app_dir / "config.json"
         self.config_manager = ConfigManager(self.config_path)
 
-        # Initialize translator
+        # Initialize translator (locales_dir auto-detected by Translator)
         language = self.config_manager.get("settings.language", "en")
-        self.translator = Translator(
-            locales_dir=Path(__file__).parent / "i18n" / "locales"
-        )
+        self.translator = Translator()
         self.translator.set_language(language)
         set_translator(self.translator)
 
@@ -124,8 +122,15 @@ class StockAlertApp:
     def _setup_api_provider(self) -> BaseProvider:
         """Set up the stock data API provider."""
         from stockalert.api.finnhub import FinnhubProvider
+        from stockalert.core.api_key_manager import get_api_key
 
-        api_key = os.environ.get("FINNHUB_API_KEY", "")
+        # Try to get API key from secure storage first
+        api_key = get_api_key()
+
+        if not api_key:
+            # Fallback to environment variable
+            api_key = os.environ.get("FINNHUB_API_KEY", "")
+
         if not api_key:
             # Try loading from .env in project root
             from dotenv import load_dotenv
@@ -273,12 +278,22 @@ class StockAlertApp:
         self.qt_app.setOrganizationName("RC Software")
         self.qt_app.setQuitOnLastWindowClosed(False)
 
+        # Check for API key before proceeding
+        api_key_valid = self._validate_api_key_on_startup()
+
+        # Check if config was recovered from corruption
+        if self.config_manager.was_recovered:
+            self._show_config_recovery_warning()
+
         # Set up components
         self._setup_monitoring()
         self._setup_ui()
 
-        # Start monitoring automatically
-        self.start_monitoring()
+        # Only start monitoring if API key is valid
+        if api_key_valid:
+            self.start_monitoring()
+        else:
+            logger.warning("Monitoring not started - API key not configured")
 
         # Show window or minimize to tray
         if self.start_minimized:
@@ -288,8 +303,71 @@ class StockAlertApp:
         else:
             if self.main_window:
                 self.main_window.showMaximized()
+                self.main_window.raise_()
+                self.main_window.activateWindow()
             if self.tray_icon:
                 self.tray_icon.show()
 
+        # If API key is missing, open settings immediately
+        if not api_key_valid and self.main_window:
+            # Use timer to show dialog after window is displayed
+            QTimer.singleShot(500, self._prompt_for_api_key)
+
         # Run event loop
-        return self.qt_app.exec()
+        return int(self.qt_app.exec())
+
+    def _validate_api_key_on_startup(self) -> bool:
+        """Validate API key on startup.
+
+        Returns:
+            True if API key is valid, False otherwise
+        """
+        from stockalert.core.api_key_manager import get_api_key, has_api_key, test_api_key
+
+        if not has_api_key():
+            logger.warning("No API key configured")
+            return False
+
+        api_key = get_api_key()
+        if not api_key:
+            return False
+
+        # Test the key
+        success, message = test_api_key(api_key)
+        if success:
+            logger.info(f"API key validated: {message}")
+            return True
+        else:
+            logger.warning(f"API key validation failed: {message}")
+            return False
+
+    def _show_config_recovery_warning(self) -> None:
+        """Show warning dialog that config was recovered from corruption."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        QMessageBox.warning(
+            None,
+            "Configuration Recovered",
+            "Your configuration file was corrupted and has been reset to defaults.\n\n"
+            "A backup of the corrupted file was saved.\n\n"
+            "Please re-enter your settings and API key.",
+        )
+
+    def _prompt_for_api_key(self) -> None:
+        """Prompt user to enter API key."""
+        from PyQt6.QtWidgets import QMessageBox
+
+        result = QMessageBox.information(
+            self.main_window,
+            "API Key Required",
+            "Welcome to StockAlert!\n\n"
+            "To monitor stock prices, you need a Finnhub API key.\n\n"
+            "1. Get a free API key at: https://finnhub.io/register\n"
+            "2. Click OK to open Settings and enter your key\n\n"
+            "The free tier allows monitoring up to 5 stocks.",
+            QMessageBox.StandardButton.Ok,
+        )
+
+        if result == QMessageBox.StandardButton.Ok and self.main_window:
+            # Switch to settings tab
+            self.main_window.tab_widget.setCurrentIndex(1)  # Settings tab

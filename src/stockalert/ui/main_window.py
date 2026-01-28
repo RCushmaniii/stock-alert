@@ -7,16 +7,17 @@ PyQt6-based responsive GUI with header, footer, tabs, and theme support.
 from __future__ import annotations
 
 import logging
+import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QUrl, QByteArray
+from PyQt6.QtCore import QPoint, Qt, QUrl
 from PyQt6.QtGui import QCloseEvent, QDesktopServices, QIcon, QPixmap
-from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QComboBox,
     QFrame,
     QHBoxLayout,
     QHeaderView,
@@ -27,9 +28,9 @@ from PyQt6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QStatusBar,
-    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -74,6 +75,8 @@ class MainWindow(QMainWindow):
         self.on_settings_changed = on_settings_changed
         self._current_theme = "dark"
         self._logo_cache: dict[str, QPixmap] = {}
+        self._logo_cache_order: list[str] = []  # Track insertion order for LRU eviction
+        self._logo_cache_max_size = 50  # Max logos to cache (prevents memory leak)
         self._network_manager = QNetworkAccessManager(self)
         self._network_manager.finished.connect(self._on_logo_loaded)
         self._pending_logos: dict[str, tuple[int, str]] = {}  # url -> (row, symbol)
@@ -81,6 +84,7 @@ class MainWindow(QMainWindow):
         self._setup_ui()
         self._load_data()
         self._apply_theme(self._current_theme)
+        self._restore_window_geometry()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
@@ -320,6 +324,12 @@ class MainWindow(QMainWindow):
         title.setObjectName("sectionTitle")
         header_layout.addWidget(title)
 
+        # Ticker count indicator (free tier limit)
+        self.ticker_count_label = QLabel()
+        self.ticker_count_label.setObjectName("tickerCountLabel")
+        self.ticker_count_label.setStyleSheet("color: #888888; font-size: 12px; margin-left: 12px;")
+        header_layout.addWidget(self.ticker_count_label)
+
         header_layout.addStretch()
 
         # Buttons at top right - all action buttons use orange styling
@@ -370,31 +380,36 @@ class MainWindow(QMainWindow):
 
         # Set up header
         header = self.ticker_table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # Checkbox
-        self.ticker_table.setColumnWidth(0, 50)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Logo
-        self.ticker_table.setColumnWidth(1, 45)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Symbol
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Name
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Industry
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Market Cap
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # High
-        header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)  # Low
-        header.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)  # Price
-        header.setSectionResizeMode(9, QHeaderView.ResizeMode.ResizeToContents)  # Enabled
+        if header is not None:
+            header.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)  # Checkbox
+            self.ticker_table.setColumnWidth(0, 50)
+            header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Logo
+            self.ticker_table.setColumnWidth(1, 45)
+            header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Symbol
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Name
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Industry
+            header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Market Cap
+            header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # High
+            header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)  # Low
+            header.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)  # Price
+            header.setSectionResizeMode(9, QHeaderView.ResizeMode.ResizeToContents)  # Enabled
 
-        # Set the first column header to have a clickable select all indicator
-        self.ticker_table.horizontalHeaderItem(0).setText("☐")
+            # Set the first column header to have a clickable select all indicator
+            header_item = self.ticker_table.horizontalHeaderItem(0)
+            if header_item is not None:
+                header_item.setText("☐")
 
-        # Create a clickable header for select all
-        header.sectionClicked.connect(self._on_header_clicked)
+            # Create a clickable header for select all
+            header.sectionClicked.connect(self._on_header_clicked)
 
         # Disable row selection - only use checkboxes
         self.ticker_table.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         self.ticker_table.setAlternatingRowColors(True)
         self.ticker_table.setMinimumHeight(300)
-        self.ticker_table.verticalHeader().setDefaultSectionSize(40)
-        self.ticker_table.verticalHeader().setVisible(False)
+        vertical_header = self.ticker_table.verticalHeader()
+        if vertical_header is not None:
+            vertical_header.setDefaultSectionSize(40)
+            vertical_header.setVisible(False)
 
         layout.addWidget(self.ticker_table)
 
@@ -407,11 +422,17 @@ class MainWindow(QMainWindow):
         """Handle header click - toggle select all for first column."""
         if logical_index == 0:
             # Toggle all checkboxes
-            all_checked = all(
-                self.ticker_table.cellWidget(row, 0).findChild(QCheckBox).isChecked()
-                for row in range(self.ticker_table.rowCount())
-                if self.ticker_table.cellWidget(row, 0)
-            ) if self.ticker_table.rowCount() > 0 else False
+            all_checked = True
+            if self.ticker_table.rowCount() > 0:
+                for row in range(self.ticker_table.rowCount()):
+                    checkbox_widget = self.ticker_table.cellWidget(row, 0)
+                    if checkbox_widget:
+                        checkbox = checkbox_widget.findChild(QCheckBox)
+                        if checkbox and not checkbox.isChecked():
+                            all_checked = False
+                            break
+            else:
+                all_checked = False
 
             new_state = not all_checked
 
@@ -427,18 +448,24 @@ class MainWindow(QMainWindow):
 
     def _update_select_all_header(self) -> None:
         """Update the select all header text based on selection state."""
+        header_item = self.ticker_table.horizontalHeaderItem(0)
         if self.ticker_table.rowCount() == 0:
-            self.ticker_table.horizontalHeaderItem(0).setText("☐")
+            if header_item is not None:
+                header_item.setText("☐")
             return
 
-        all_checked = all(
-            self.ticker_table.cellWidget(row, 0).findChild(QCheckBox).isChecked()
-            for row in range(self.ticker_table.rowCount())
-            if self.ticker_table.cellWidget(row, 0)
-        )
+        all_checked = True
+        for row in range(self.ticker_table.rowCount()):
+            checkbox_widget = self.ticker_table.cellWidget(row, 0)
+            if checkbox_widget:
+                checkbox = checkbox_widget.findChild(QCheckBox)
+                if checkbox and not checkbox.isChecked():
+                    all_checked = False
+                    break
 
         # Use filled or empty box character
-        self.ticker_table.horizontalHeaderItem(0).setText("☑" if all_checked else "☐")
+        if header_item is not None:
+            header_item.setText("☑" if all_checked else "☐")
 
     def _on_select_all_changed(self, state: int) -> None:
         """Handle select all checkbox state change."""
@@ -547,7 +574,11 @@ class MainWindow(QMainWindow):
     def _apply_theme(self, theme: str) -> None:
         """Apply the specified theme."""
         self._current_theme = theme
-        style_path = Path(__file__).parent / "styles" / "theme.qss"
+        # Handle frozen exe vs development
+        if getattr(sys, "frozen", False):
+            style_path = Path(sys.executable).parent / "lib" / "stockalert" / "ui" / "styles" / "theme.qss"
+        else:
+            style_path = Path(__file__).parent / "styles" / "theme.qss"
         if style_path.exists():
             with open(style_path, encoding="utf-8") as f:
                 base_style = f.read()
@@ -1074,6 +1105,133 @@ QMessageBox QLabel {
 QDialog {
     background-color: #141414;
 }
+
+/* News Widget */
+#newsCard {
+    background-color: #1E1E1E;
+    border: 1px solid #3A3A3A;
+    border-radius: 12px;
+}
+
+#newsCard:hover {
+    border-color: #FF6A3D;
+    background-color: #282828;
+}
+
+#newsThumbnail {
+    background-color: #2A2A2A;
+    border: 1px solid #3A3A3A;
+    border-radius: 8px;
+    font-size: 28px;
+}
+
+/* Ensure news card content has no background */
+#newsCard QLabel {
+    background: transparent;
+}
+
+#newsCard QWidget {
+    background: transparent;
+}
+
+#newsScrollArea {
+    background: transparent;
+    border: none;
+}
+
+#newsScrollArea QWidget {
+    background: transparent;
+}
+
+#newsHeadline {
+    font-weight: bold;
+    font-size: 14px;
+    color: #FFFFFF;
+    background: transparent;
+}
+
+#newsSummary {
+    color: #B0B0B0;
+    font-size: 12px;
+    background: transparent;
+}
+
+#newsMeta {
+    color: #888888;
+    font-size: 11px;
+    background: transparent;
+}
+
+#newsFilterCombo {
+    background-color: #2A2A2A;
+    color: #FFFFFF;
+    border: 1px solid #444444;
+    border-radius: 6px;
+    padding: 8px 14px;
+    padding-right: 40px;
+    min-width: 130px;
+    font-size: 13px;
+}
+
+#newsFilterCombo:hover {
+    border-color: #FF6A3D;
+}
+
+#newsFilterCombo::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    width: 36px;
+    border: none;
+    background-color: #FF6A3D;
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+}
+
+#newsFilterCombo::down-arrow {
+    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQiIGhlaWdodD0iOCIgdmlld0JveD0iMCAwIDE0IDgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTEgMUw3IDdMMTMgMSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==);
+    width: 14px;
+    height: 8px;
+}
+
+#newsFilterCombo:hover::drop-down {
+    background-color: #FF8560;
+}
+
+#newsFilterCombo QAbstractItemView {
+    background-color: #1E1E1E;
+    color: #FFFFFF;
+    selection-background-color: #FF6A3D;
+    selection-color: #FFFFFF;
+    border: 1px solid #444444;
+    outline: none;
+}
+
+#newsFilterCombo QAbstractItemView::item {
+    padding: 8px 12px;
+    min-height: 24px;
+}
+
+#newsFilterCombo QAbstractItemView::item:hover {
+    background-color: #FF6A3D;
+    color: #FFFFFF;
+}
+
+#symbolHeader {
+    color: #FF6A3D;
+    font-weight: bold;
+    font-size: 15px;
+}
+
+/* Mode Cards for Service Settings */
+#modeCard {
+    background-color: #1A1A1A;
+    border: 2px solid #3A3A3A;
+    border-radius: 8px;
+}
+
+#modeCard:hover {
+    border-color: #FF6A3D;
+}
 """
 
     def _get_light_theme(self) -> str:
@@ -1585,6 +1743,100 @@ QMessageBox QLabel {
 QDialog {
     background-color: #FFFFFF;
 }
+
+/* News Widget - Light Theme */
+#newsCard {
+    background-color: #FFFFFF;
+    border: 1px solid #D0D0D0;
+    border-radius: 12px;
+}
+
+#newsCard:hover {
+    border-color: #FF6A3D;
+    background-color: #FFF8F5;
+}
+
+#newsThumbnail {
+    background-color: #F0F0F0;
+    border-radius: 8px;
+    font-size: 32px;
+}
+
+#newsHeadline {
+    font-weight: bold;
+    font-size: 14px;
+    color: #000000;
+}
+
+#newsSummary {
+    color: #444444;
+    font-size: 12px;
+}
+
+#newsMeta {
+    color: #666666;
+    font-size: 11px;
+}
+
+#newsFilterCombo {
+    background-color: #FFFFFF;
+    color: #000000;
+    border: 1px solid #CCCCCC;
+    border-radius: 6px;
+    padding: 8px 14px;
+    padding-right: 40px;
+    min-width: 130px;
+    font-size: 13px;
+}
+
+#newsFilterCombo:hover {
+    border-color: #FF6A3D;
+}
+
+#newsFilterCombo::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    width: 36px;
+    border: none;
+    background-color: #FF6A3D;
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+}
+
+#newsFilterCombo::down-arrow {
+    image: url(data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTQiIGhlaWdodD0iOCIgdmlld0JveD0iMCAwIDE0IDgiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTEgMUw3IDdMMTMgMSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvc3ZnPg==);
+    width: 14px;
+    height: 8px;
+}
+
+#newsFilterCombo:hover::drop-down {
+    background-color: #FF8560;
+}
+
+#newsFilterCombo QAbstractItemView {
+    background-color: #FFFFFF;
+    color: #000000;
+    selection-background-color: #FF6A3D;
+    selection-color: #FFFFFF;
+    border: 1px solid #CCCCCC;
+}
+
+#symbolHeader {
+    color: #FF6A3D;
+    font-weight: bold;
+    font-size: 15px;
+}
+
+/* Mode Cards for Service Settings */
+#modeCard {
+    background-color: #FFFFFF;
+    border: 2px solid #E5E5E5;
+    border-radius: 8px;
+}
+
+#modeCard:hover {
+    border-color: #FF6A3D;
+}
 """
 
     def _update_lang_buttons(self, current_lang: str) -> None:
@@ -1618,6 +1870,20 @@ QDialog {
             # Moon icon (switch to dark)
             self.theme_btn.setText("🌙")
             self.theme_btn.setToolTip(_("theme.dark"))
+
+    def _truncate_text(self, text: str, max_length: int = 30) -> str:
+        """Truncate text with ellipsis if too long.
+
+        Args:
+            text: Text to truncate
+            max_length: Maximum length before truncation
+
+        Returns:
+            Original text or truncated with ellipsis
+        """
+        if len(text) <= max_length:
+            return text
+        return text[: max_length - 3] + "..."
 
     def _format_market_cap(self, market_cap: float) -> tuple[str, str]:
         """Format market cap value and return category.
@@ -1656,6 +1922,10 @@ QDialog {
 
         # Check cache first
         if url in self._logo_cache:
+            # Move to end of order list (most recently used)
+            if url in self._logo_cache_order:
+                self._logo_cache_order.remove(url)
+                self._logo_cache_order.append(url)
             self._set_logo_cell(row, self._logo_cache[url], symbol)
             return
 
@@ -1685,10 +1955,33 @@ QDialog {
                         Qt.AspectRatioMode.KeepAspectRatio,
                         Qt.TransformationMode.SmoothTransformation
                     )
-                    self._logo_cache[url] = scaled
+                    self._add_to_logo_cache(url, scaled)
                     self._set_logo_cell(row, scaled, symbol)
 
         reply.deleteLater()
+
+    def _add_to_logo_cache(self, url: str, pixmap: QPixmap) -> None:
+        """Add a logo to the cache with LRU eviction.
+
+        Args:
+            url: Logo URL (cache key)
+            pixmap: Logo pixmap to cache
+        """
+        # If already in cache, move to end of order list (most recently used)
+        if url in self._logo_cache:
+            self._logo_cache_order.remove(url)
+            self._logo_cache_order.append(url)
+            return
+
+        # Evict oldest entries if cache is full
+        while len(self._logo_cache) >= self._logo_cache_max_size:
+            if self._logo_cache_order:
+                oldest_url = self._logo_cache_order.pop(0)
+                self._logo_cache.pop(oldest_url, None)
+
+        # Add to cache
+        self._logo_cache[url] = pixmap
+        self._logo_cache_order.append(url)
 
     def _set_logo_cell(self, row: int, pixmap: QPixmap, symbol: str = "") -> None:
         """Set the logo pixmap in a table cell - clickable to open chart."""
@@ -1749,8 +2042,23 @@ QDialog {
 
     def _refresh_ticker_table(self) -> None:
         """Refresh the ticker table with current data."""
+        from stockalert.core.tier_limits import get_max_tickers
+
         tickers = self.config_manager.get_tickers()
         self.ticker_table.setRowCount(len(tickers))
+
+        # Update ticker count label
+        current_count = len(tickers)
+        max_count = get_max_tickers()
+        self.ticker_count_label.setText(_("tickers.ticker_count", current=current_count, max=max_count))
+
+        # Change color based on limit proximity
+        if current_count >= max_count:
+            self.ticker_count_label.setStyleSheet("color: #FF6A3D; font-size: 12px; margin-left: 12px; font-weight: bold;")
+        elif current_count >= max_count - 3:
+            self.ticker_count_label.setStyleSheet("color: #FFAA00; font-size: 12px; margin-left: 12px;")
+        else:
+            self.ticker_count_label.setStyleSheet("color: #888888; font-size: 12px; margin-left: 12px;")
 
         for row, ticker in enumerate(tickers):
             # Column 0: Checkbox
@@ -1818,9 +2126,13 @@ QDialog {
             symbol_item.setFlags(symbol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.ticker_table.setItem(row, 2, symbol_item)
 
-            # Column 3: Name
-            name_item = QTableWidgetItem(ticker.get("name", ""))
+            # Column 3: Name (truncate long names, show full in tooltip)
+            full_name = ticker.get("name", "")
+            display_name = self._truncate_text(full_name, max_length=30)
+            name_item = QTableWidgetItem(display_name)
             name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            if len(full_name) > 30:
+                name_item.setToolTip(full_name)
             self.ticker_table.setItem(row, 3, name_item)
 
             # Column 4: Industry
@@ -1876,7 +2188,7 @@ QDialog {
         """Get the currently selected row index, or -1 if none."""
         selection = self.ticker_table.selectedItems()
         if selection:
-            return selection[0].row()
+            return int(selection[0].row())
         return -1
 
     def _get_selected_symbol(self) -> str | None:
@@ -1885,7 +2197,7 @@ QDialog {
         if row >= 0:
             item = self.ticker_table.item(row, 2)  # Column 2 is symbol
             if item:
-                return item.text()
+                return str(item.text())
         return None
 
     def _on_add_ticker(self) -> None:
@@ -1983,10 +2295,22 @@ QDialog {
     def _on_refresh_profiles(self) -> None:
         """Refresh company profile data for all tickers."""
         from stockalert.api.finnhub import FinnhubProvider
+        from stockalert.core.api_key_manager import get_api_key
+
+        # Get API key from secure storage
+        api_key = get_api_key()
+
+        if not api_key:
+            QMessageBox.warning(
+                self,
+                _("errors.title"),
+                _("errors.no_api_key"),
+            )
+            return
 
         try:
-            provider = FinnhubProvider()
-        except Exception as e:
+            provider = FinnhubProvider(api_key=api_key)
+        except Exception:
             logger.exception("Failed to initialize Finnhub provider")
             QMessageBox.warning(
                 self,
@@ -2102,7 +2426,66 @@ QDialog {
                         price_item.setText("--")
                 break
 
-    def closeEvent(self, event: QCloseEvent) -> None:
+    def closeEvent(self, event: QCloseEvent | None) -> None:
         """Handle window close - minimize to tray instead of quitting."""
-        event.ignore()
+        # Save window geometry before hiding
+        self._save_window_geometry()
+
+        if event is not None:
+            event.ignore()
         self.hide()
+
+    def _save_window_geometry(self) -> None:
+        """Save window position and size to config."""
+        try:
+            geometry = self.geometry()
+            window_state = {
+                "x": geometry.x(),
+                "y": geometry.y(),
+                "width": geometry.width(),
+                "height": geometry.height(),
+                "maximized": self.isMaximized(),
+            }
+            self.config_manager.set("window", window_state, save=True)
+        except Exception as e:
+            logger.debug(f"Failed to save window geometry: {e}")
+
+    def _restore_window_geometry(self) -> None:
+        """Restore window position and size from config."""
+        try:
+            window_state = self.config_manager.get("window", {})
+            if not window_state:
+                return
+
+            x = window_state.get("x")
+            y = window_state.get("y")
+            width = window_state.get("width")
+            height = window_state.get("height")
+            maximized = window_state.get("maximized", False)
+
+            # Validate values exist
+            if None in (x, y, width, height):
+                return
+
+            # Ensure window is on a visible screen
+            from PyQt6.QtGui import QGuiApplication
+
+            screens = QGuiApplication.screens()
+            if screens:
+                # Check if saved position is on any screen
+                point = QPoint(x + width // 2, y + height // 2)
+                on_screen = any(
+                    screen.geometry().contains(point) for screen in screens
+                )
+
+                if on_screen:
+                    self.setGeometry(x, y, width, height)
+                    if maximized:
+                        self.showMaximized()
+                    return
+
+            # Position not on any screen, use default
+            logger.debug("Saved window position not on visible screen, using default")
+
+        except Exception as e:
+            logger.debug(f"Failed to restore window geometry: {e}")

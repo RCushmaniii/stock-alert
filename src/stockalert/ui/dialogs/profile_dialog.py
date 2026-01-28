@@ -7,9 +7,10 @@ Provides UI for editing user profile information.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable
+import re
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QFormLayout,
     QGroupBox,
@@ -125,6 +126,42 @@ class ProfileWidget(QWidget):
         self.email_input.setText(profile.get("email", ""))
         self.cell_input.setText(profile.get("cell", ""))
 
+    def _validate_phone_number(self, phone: str) -> tuple[bool, str]:
+        """Validate phone number format.
+
+        Args:
+            phone: Phone number to validate
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        if not phone:
+            return True, ""  # Empty is okay
+
+        # Remove all non-digit characters except leading +
+        cleaned = re.sub(r"[^\d+]", "", phone)
+
+        # Must start with + for international format
+        if not cleaned.startswith("+"):
+            # If it doesn't start with +, add it for validation
+            cleaned = "+" + cleaned.lstrip("+")
+
+        # Remove the + for digit counting
+        digits_only = cleaned.lstrip("+")
+
+        # E.164 format: + followed by 1-15 digits
+        if len(digits_only) < 7:
+            return False, "Phone number is too short (minimum 7 digits)"
+
+        if len(digits_only) > 15:
+            return False, "Phone number is too long (maximum 15 digits)"
+
+        # Check it's only digits
+        if not digits_only.isdigit():
+            return False, "Phone number contains invalid characters"
+
+        return True, ""
+
     def _on_save_clicked(self) -> None:
         """Handle save button click."""
         try:
@@ -132,6 +169,19 @@ class ProfileWidget(QWidget):
             name = self.name_input.text().strip()
             email = self.email_input.text().strip()
             cell = self.cell_input.text().strip()
+
+            # Validate phone number
+            is_valid, error_msg = self._validate_phone_number(cell)
+            if not is_valid:
+                self.status_label.setText(error_msg)
+                self.status_label.setStyleSheet("color: #ef4444;")
+                QMessageBox.warning(
+                    self,
+                    "Invalid Phone Number",
+                    error_msg + "\n\nPlease enter a valid phone number in international format.\n"
+                    "Example: +1 555 123 4567",
+                )
+                return
 
             # Update configuration
             self.config_manager.set("profile.name", name, save=False)

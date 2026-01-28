@@ -14,6 +14,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from stockalert.core.tier_limits import can_add_ticker, get_max_tickers
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,8 +71,13 @@ class ConfigManager:
         self._load()
 
     def _load(self) -> None:
-        """Load configuration from file."""
+        """Load configuration from file.
+
+        If the config file is corrupted, backs it up and creates a fresh default.
+        """
         with self._lock:
+            self._config_recovered = False  # Track if we recovered from corruption
+
             if not self.config_path.exists():
                 # Try to copy from example
                 example_path = self.config_path.parent / "config.example.json"
@@ -90,10 +97,51 @@ class ConfigManager:
                 self._migrate()
                 self._validate()
                 logger.info(f"Loaded configuration from {self.config_path}")
-            except json.JSONDecodeError as e:
-                raise ConfigError(f"Invalid JSON in config file: {e}") from e
+            except (json.JSONDecodeError, ConfigError) as e:
+                # Config is corrupted - backup and recover
+                logger.error(f"Config file corrupted: {e}")
+                self._recover_from_corruption(str(e))
             except OSError as e:
                 raise ConfigError(f"Failed to read config file: {e}") from e
+
+    def _recover_from_corruption(self, error_msg: str) -> None:
+        """Backup corrupted config and create fresh default.
+
+        Args:
+            error_msg: The error message describing the corruption
+        """
+        import datetime
+
+        # Create backup filename with timestamp
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = self.config_path.with_suffix(f".corrupted_{timestamp}.json")
+
+        try:
+            # Backup the corrupted file
+            shutil.copy(self.config_path, backup_path)
+            logger.warning(f"Backed up corrupted config to: {backup_path}")
+        except OSError as e:
+            logger.error(f"Failed to backup corrupted config: {e}")
+
+        # Create fresh default config
+        self._config = DEFAULT_CONFIG.copy()
+        self._save()
+        self._config_recovered = True
+
+        logger.warning(
+            f"Created fresh default config due to corruption. "
+            f"Original error: {error_msg}. "
+            f"Backup saved to: {backup_path}"
+        )
+
+    @property
+    def was_recovered(self) -> bool:
+        """Check if config was recovered from corruption on load.
+
+        Returns:
+            True if config was corrupted and recovered, False otherwise
+        """
+        return getattr(self, "_config_recovered", False)
 
     def _migrate(self) -> None:
         """Migrate older config versions to current format."""
@@ -204,7 +252,8 @@ class ConfigManager:
             List of ticker configurations
         """
         with self._lock:
-            return self._config.get("tickers", []).copy()
+            tickers: list[dict[str, Any]] = self._config.get("tickers", [])
+            return list(tickers)  # Return a copy
 
     def get_enabled_tickers(self) -> list[dict[str, Any]]:
         """Get list of enabled tickers.
@@ -255,6 +304,15 @@ class ConfigManager:
             symbol = symbol.upper()
             if any(t["symbol"] == symbol for t in self._config["tickers"]):
                 raise ConfigError(f"Ticker {symbol} already exists")
+
+            # Check free tier limit
+            current_count = len(self._config["tickers"])
+            if not can_add_ticker(current_count):
+                max_tickers = get_max_tickers()
+                raise ConfigError(
+                    f"Free tier limit reached ({max_tickers} tickers max). "
+                    "Upgrade for unlimited tickers."
+                )
 
             self._config["tickers"].append(
                 {
@@ -331,14 +389,15 @@ class ConfigManager:
                 if ticker["symbol"] == symbol:
                     ticker["enabled"] = not ticker.get("enabled", True)
                     self._save()
-                    return ticker["enabled"]
+                    return bool(ticker["enabled"])
             raise ConfigError(f"Ticker {symbol} not found")
 
     @property
     def settings(self) -> dict[str, Any]:
         """Get settings section."""
         with self._lock:
-            return self._config.get("settings", {}).copy()
+            settings: dict[str, Any] = self._config.get("settings", {})
+            return dict(settings)  # Return a copy
 
     def to_dict(self) -> dict[str, Any]:
         """Get full configuration as dictionary."""

@@ -1,0 +1,15 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/*.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/send_whatsapp",
+      "dest": "/api/send_whatsapp.py"
+    }
+  ]
+}
