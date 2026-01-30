@@ -17,8 +17,8 @@ from http.server import BaseHTTPRequestHandler
 from twilio.rest import Client
 
 
-# Content Template SID for stock price alerts
-STOCK_ALERT_TEMPLATE_SID = "HX76e5dcfa1ce6bc7df6e5cca8dc30cb0a"
+# Content Template SID for stock price alerts (ai_stock_price_alert_02)
+STOCK_ALERT_TEMPLATE_SID = "HX138b713346901520a4a6d48e21ec3e68"
 
 # Phone number formatting patterns by country
 COUNTRY_FORMATS = {
@@ -128,12 +128,13 @@ def send_whatsapp_message(to_number: str, message: str = None, template_data: di
 
         # Use template for stock alerts, free-form for test messages
         if template_data:
-            # Template variables: {{1}}=symbol, {{2}}=price, {{3}}=threshold, {{4}}=direction
+            # Template variables: {{1}}=symbol, {{2}}=price, {{3}}=direction, {{4}}=threshold
+            # Accept both formats: {"1": "AAPL"} or {"symbol": "AAPL"}
             content_variables = json.dumps({
-                "1": template_data.get("symbol", "STOCK"),
-                "2": str(template_data.get("price", "0.00")),
-                "3": str(template_data.get("threshold", "0.00")),
-                "4": template_data.get("direction", "crossed"),
+                "1": template_data.get("1") or template_data.get("symbol", "STOCK"),
+                "2": str(template_data.get("2") or template_data.get("price", "0.00")),
+                "3": template_data.get("3") or template_data.get("direction", "crossed"),
+                "4": str(template_data.get("4") or template_data.get("threshold", "0.00")),
             })
 
             message_obj = client.messages.create(
