@@ -227,24 +227,29 @@ class TickerDialog(QDialog):
 
             # Get API key from secure storage
             api_key = get_api_key()
+            logger.info(f"Refreshing price for {symbol}, API key present: {bool(api_key)}")
 
             if api_key:
                 provider = FinnhubProvider(api_key=api_key)
+                logger.info(f"Rate limiter tokens: {provider.tokens_available:.1f}")
                 price = provider.get_price(symbol)
+                logger.info(f"Got price for {symbol}: {price}")
                 if price is not None:
                     self._current_price = price
                     self.price_label.setText(f"${price:.2f}")
                     self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #00AA00;")
                 else:
-                    self.price_label.setText("N/A")
+                    self.price_label.setText("N/A (market closed?)")
                     self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #888888;")
             else:
                 self.price_label.setText("No API key")
                 self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #888888;")
 
-        except Exception:
-            logger.exception("Failed to fetch price")
-            self.price_label.setText("Error")
+        except Exception as e:
+            logger.exception(f"Failed to fetch price for {symbol}")
+            # Show actual error to help debug
+            error_msg = str(e)[:30] if str(e) else "Unknown error"
+            self.price_label.setText(f"Error: {error_msg}")
             self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #FF0000;")
 
     def _load_ticker(self, ticker: dict[str, Any]) -> None:
@@ -366,10 +371,18 @@ class TickerDialog(QDialog):
                 self.price_label.setText("No API key")
                 self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #888888;")
 
-        except Exception:
+        except Exception as e:
             logger.exception("Symbol validation failed")
-            self.status_label.setText(_("tickers.invalid_symbol"))
-            self.status_label.setStyleSheet("color: red;")
+            error_msg = str(e)
+            if "rate" in error_msg.lower() or "limit" in error_msg.lower():
+                self.status_label.setText("Rate limit - wait a moment")
+                self.status_label.setStyleSheet("color: orange;")
+            elif "api" in error_msg.lower() or "key" in error_msg.lower():
+                self.status_label.setText("API error - check key")
+                self.status_label.setStyleSheet("color: red;")
+            else:
+                self.status_label.setText(f"Error: {error_msg[:40]}")
+                self.status_label.setStyleSheet("color: red;")
         finally:
             self.validate_button.setEnabled(True)
 

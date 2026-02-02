@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "StockAlert",
-    "version": "3.0.0",
+    "version": "4.0.0",
     "description": "Stock price monitoring with Windows notifications"
   },
   "languages": {
@@ -55,18 +55,19 @@
     "cell_help": "Required for WhatsApp alerts (include country code)",
     "save": "Save Profile",
     "saved": "Profile saved successfully!",
-    "save_error": "Failed to save profile"
+    "save_error": "Failed to save profile",
+    "invalid_phone": "Invalid phone number"
   },
   "help": {
     "title": "Help & Tips",
     "getting_started": "Getting Started",
-    "getting_started_content": "AI StockAlert monitors your selected stocks in real-time and sends alerts via Windows notifications, WhatsApp, or email when prices cross your defined thresholds.\n\n1. Add stocks to monitor in the Tickers tab\n2. Set high and low price thresholds for each stock\n3. Enable the Background Service in Settings to receive alerts 24/7\n4. Close the app - the service keeps running and sending alerts!",
+    "getting_started_content": "AI StockAlert monitors your selected stocks in real-time and sends alerts via Windows notifications and WhatsApp when prices cross your defined thresholds.\n\n1. Enter your Finnhub API key in Settings (get free at finnhub.io)\n2. Add stocks to monitor in the Tickers tab\n3. Set high and low price thresholds for each stock\n4. Configure your alert channels (Windows, WhatsApp)\n5. Enable the Background Service in Settings to receive alerts 24/7",
     "settings_tips": "Settings Tips",
-    "settings_tips_content": "• Check Interval: How often the app fetches new prices. Lower values mean more frequent updates but use more API calls. Recommended: 1-5 minutes for active trading, 15-30 minutes for casual monitoring.\n\n• Cooldown Period: Prevents repeated alerts for the same stock. After an alert fires, you won't get another for that stock until the cooldown expires. Recommended: 5-15 minutes.\n\n• Alert Channels: Choose how you want to be notified - Windows notifications, WhatsApp, or email. You can enable multiple channels.",
+    "settings_tips_content": "• API Key: Get your free Finnhub API key at finnhub.io/dashboard. Required for stock data.\n\n• Check Interval: How often the app fetches new prices. Free tier minimum is 90 seconds.\n\n• Cooldown Period: Prevents repeated alerts for the same stock. After an alert fires, you won't get another for that stock until the cooldown expires. Recommended: 5-15 minutes.\n\n• Alert Channels: Choose Windows notifications and/or WhatsApp. Use the Test buttons to verify they work.",
     "tickers_title": "Managing Tickers",
-    "tickers_content": "• Add Ticker: Enter the stock symbol (e.g., AAPL, MSFT, GOOGL) and set your price thresholds.\n\n• High Threshold: You'll be alerted when the price rises ABOVE this value.\n\n• Low Threshold: You'll be alerted when the price falls BELOW this value.\n\n• Toggle Enabled: Temporarily disable monitoring for a stock without deleting it.",
+    "tickers_content": "• Add Ticker: Enter the stock symbol (e.g., AAPL, MSFT, GOOGL) and set your price thresholds.\n\n• High Threshold: You'll be alerted when the price rises ABOVE this value.\n\n• Low Threshold: You'll be alerted when the price falls BELOW this value.\n\n• Toggle Enabled: Temporarily disable monitoring for a stock without deleting it.\n\n• Free Tier Limit: Up to 15 tickers can be monitored.",
     "alerts_title": "Understanding Alerts",
-    "alerts_content": "• Alerts appear as Windows notifications when a stock crosses your threshold.\n\n• Click the notification to open a price chart for that stock.\n\n• The app respects market hours - no alerts during weekends or holidays.\n\n• WhatsApp Alerts: Requires your phone number in the Profile tab.",
+    "alerts_content": "• Windows Alerts: Appear as notifications in the bottom-right corner. Click to open a price chart.\n\n• WhatsApp Alerts: Requires your phone number in the Profile tab and Twilio configuration.\n\n• The app respects market hours - alerts only fire during US market hours (9:30 AM - 4:00 PM ET, Mon-Fri).",
     "service_title": "Background Service",
     "service_content": "• The Background Service allows StockAlert to monitor prices and send alerts even when the GUI is closed.\n\n• Go to Settings > Background Service and click 'Start Service' to enable it.\n\n• The service runs silently in the background until you stop it or restart your computer.\n\n• Your settings and ticker configuration are automatically picked up by the service when you save changes."
   },
@@ -74,6 +75,9 @@
     "title": "Monitoring Settings",
     "check_interval": "Check Interval",
     "check_interval_help": "How often to check stock prices",
+    "unit_seconds": "seconds",
+    "unit_minutes": "minutes",
+    "unit_hours": "hours",
     "cooldown": "Cooldown Period (seconds)",
     "cooldown_help": "Time between repeated alerts for the same stock",
     "alerts_title": "Alert Channels",
@@ -85,22 +89,38 @@
     "alerts_sms_help": "Requires cell phone in Profile tab",
     "alerts_whatsapp": "WhatsApp Alerts",
     "alerts_whatsapp_help": "Requires cell phone in Profile tab",
+    "alerts_whatsapp_requires_phone": "Requires cell phone in Profile tab",
     "language_title": "Language",
     "language": "Display Language",
     "language_help": "Application display language",
-    "api_provider": "Data Provider",
+    "provider_title": "Provider",
+    "provider_name": "Name",
+    "market_data_title": "Market Data",
+    "api_provider": "Provider",
     "api_provider_help": "Stock data source",
+    "api_key": "API Key",
+    "api_key_placeholder": "Enter your Finnhub API key",
+    "license": "License",
+    "license_free": "Free",
+    "api_key_help": "1. Get your free API key from <a href='https://finnhub.io/dashboard'>finnhub.io/dashboard</a><br/>2. Paste your API key into the field above<br/>3. Click Test Connection",
+    "api_key_configured": "API key configured",
+    "api_key_not_set": "API key not configured",
+    "api_key_pasted": "API key pasted from clipboard",
+    "api_key_empty": "Please enter an API key",
+    "paste": "Paste",
+    "test_connection": "Test Connection",
+    "testing_connection": "Testing connection...",
     "save": "Save Settings",
     "saved": "Settings saved successfully!",
     "save_error": "Failed to save settings",
     "service_title": "Background Service",
     "service_status": "Service Status",
     "service_mode": "Monitoring Mode",
-    "service_mode_help": "Choose how monitoring runs when the GUI is closed",
-    "mode_embedded": "Embedded (GUI required)",
-    "mode_embedded_help": "Monitoring stops when you close the GUI window",
-    "mode_background": "Background Service",
-    "mode_background_help": "Monitoring continues even after closing the GUI",
+    "service_mode_help": "Choose how monitoring runs when you close this window",
+    "mode_embedded": "Only While App Open",
+    "mode_embedded_help": "Alerts stop when you close this window",
+    "mode_background": "24/7 Background",
+    "mode_background_help": "Alerts continue even after closing this window",
     "service_start": "Start Service",
     "service_start_help": "Start the background monitoring service. It will continue running even after you close this window.",
     "service_stop": "Stop Service",
@@ -109,7 +129,21 @@
     "service_stopping": "Stopping service...",
     "service_started": "Background service started",
     "service_stopped": "Background service stopped",
-    "service_embedded_note": "In Embedded mode, monitoring is controlled by the GUI"
+    "service_embedded_note": "In Embedded mode, monitoring is controlled by the GUI",
+    "autostart": "Start with Windows",
+    "autostart_help": "Automatically start the background service when Windows starts (no admin required)",
+    "interval_limit_title": "Free Tier Limit",
+    "interval_limit_message": "Free tier minimum check interval is {min_seconds} seconds. Upgrade for faster monitoring.",
+    "free_tier_note": "Free tier: {max_tickers} tickers, {min_interval}s minimum interval",
+    "tier_limits": "Tier Limits",
+    "tier_limits_free": "Max {max_tickers} tickers, {min_interval}s minimum check interval",
+    "test": "Test",
+    "testing_windows": "Sending test notification...",
+    "test_windows_success": "Test notification sent! Check your Windows notifications.",
+    "testing_whatsapp": "Sending test WhatsApp message...",
+    "test_whatsapp_success": "Test message sent! Check your WhatsApp.",
+    "test_whatsapp_title": "WhatsApp Test",
+    "test_whatsapp_no_phone": "Please set your phone number in the Profile tab first."
   },
   "tickers": {
     "title": "Stock Tickers",
@@ -140,9 +174,16 @@
     "refresh_price": "Refresh",
     "refresh_profiles": "Refresh Data",
     "refreshing_profiles": "Refreshing...",
-    "profiles_refreshed": "Profile data refreshed for {count} tickers"
+    "profiles_refreshed": "Profile data refreshed for {count} tickers",
+    "limit_reached": "Free tier limit reached ({limit} tickers max). Upgrade for unlimited tickers.",
+    "ticker_count": "{current} of {max} tickers"
   },
   "alerts": {
+    "app_title": "AI StockAlert",
+    "crossed_above": "crossed above",
+    "crossed_below": "crossed below",
+    "current": "Current:",
+    "threshold": "Threshold:",
     "high": {
       "title": "{symbol} High Alert",
       "message": "{name} reached ${price:.2f} (threshold: ${threshold:.2f})"
@@ -199,7 +240,9 @@
     "yes": "Yes",
     "no": "No",
     "ok": "OK",
-    "apply": "Apply"
+    "apply": "Apply",
+    "unsaved_changes_title": "Unsaved Changes",
+    "unsaved_changes_message": "You have unsaved settings changes. Would you like to save them before closing?"
   },
   "errors": {
     "title": "Error",
@@ -230,5 +273,19 @@
     "paused": "Paused",
     "error": "Error: {message}",
     "rate_limit": "Rate limited - waiting"
+  },
+  "onboarding": {
+    "title": "Welcome to StockAlert!",
+    "subtitle": "Let's get you set up in 3 easy steps:",
+    "step1_title": "1. Complete Your Profile",
+    "step1_desc": "Add your name, email, and phone number to receive personalized alerts via email and WhatsApp.",
+    "step2_title": "2. Add Your API Key",
+    "step2_desc": "Get a free Finnhub API key at finnhub.io/register and enter it in Settings. This enables real-time stock data.",
+    "step3_title": "3. Add Stocks to Monitor",
+    "step3_desc": "Go to the Tickers tab and add stocks you want to track. Set high/low price thresholds to trigger alerts.",
+    "tip_title": "Pro Tip:",
+    "tip_desc": "Enable '24/7 Background' mode in Settings to receive alerts even when this window is closed!",
+    "btn_get_started": "Get Started",
+    "btn_skip": "Skip for Now"
   }
 }

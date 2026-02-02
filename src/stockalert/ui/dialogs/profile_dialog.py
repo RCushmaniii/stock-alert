@@ -7,7 +7,6 @@ Provides UI for editing user profile information.
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
@@ -23,6 +22,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from stockalert.core.phone_utils import validate_phone_number, get_validation_hint
 from stockalert.i18n.translator import _
 
 if TYPE_CHECKING:
@@ -64,8 +64,8 @@ class ProfileWidget(QWidget):
         layout.setSpacing(24)
 
         # Profile group
-        profile_group = QGroupBox(_("profile.title"))
-        form_layout = QFormLayout(profile_group)
+        self.profile_group = QGroupBox(_("profile.title"))
+        form_layout = QFormLayout(self.profile_group)
         form_layout.setVerticalSpacing(16)
         form_layout.setHorizontalSpacing(20)
         form_layout.setContentsMargins(24, 32, 24, 24)
@@ -90,17 +90,31 @@ class ProfileWidget(QWidget):
         self.email_help.setObjectName("helpLabel")
         form_layout.addRow("", self.email_help)
 
-        # Cell/Phone
+        # Cell/Phone with validation
+        cell_container = QWidget()
+        cell_layout = QVBoxLayout(cell_container)
+        cell_layout.setContentsMargins(0, 0, 0, 0)
+        cell_layout.setSpacing(4)
+
         self.cell_input = QLineEdit()
         self.cell_input.setPlaceholderText(_("profile.cell_placeholder"))
+        self.cell_input.textChanged.connect(self._on_phone_changed)
+        cell_layout.addWidget(self.cell_input)
+
+        # Phone validation status label
+        self.phone_validation_label = QLabel("")
+        self.phone_validation_label.setObjectName("validationLabel")
+        self.phone_validation_label.setWordWrap(True)
+        cell_layout.addWidget(self.phone_validation_label)
+
         self.cell_label = QLabel(_("profile.cell"))
-        form_layout.addRow(self.cell_label, self.cell_input)
+        form_layout.addRow(self.cell_label, cell_container)
 
         self.cell_help = QLabel(_("profile.cell_help"))
         self.cell_help.setObjectName("helpLabel")
         form_layout.addRow("", self.cell_help)
 
-        layout.addWidget(profile_group)
+        layout.addWidget(self.profile_group)
 
         # Status label
         self.status_label = QLabel("")
@@ -126,8 +140,27 @@ class ProfileWidget(QWidget):
         self.email_input.setText(profile.get("email", ""))
         self.cell_input.setText(profile.get("cell", ""))
 
+        # Validate loaded phone number
+        self._on_phone_changed(profile.get("cell", ""))
+
+    def _on_phone_changed(self, text: str) -> None:
+        """Handle phone number input changes with real-time validation."""
+        if not text.strip():
+            self.phone_validation_label.setText("")
+            return
+
+        result = validate_phone_number(text)
+        if result.valid:
+            # Simple user-friendly message: ✓ Country
+            display = f"✓ {result.country_name}" if result.country_name else "✓ Valid"
+            self.phone_validation_label.setText(display)
+            self.phone_validation_label.setStyleSheet("color: #22c55e;")
+        else:
+            self.phone_validation_label.setText(result.error_message or _("profile.invalid_phone"))
+            self.phone_validation_label.setStyleSheet("color: #ef4444;")
+
     def _validate_phone_number(self, phone: str) -> tuple[bool, str]:
-        """Validate phone number format.
+        """Validate phone number using phonenumbers library.
 
         Args:
             phone: Phone number to validate
@@ -138,29 +171,10 @@ class ProfileWidget(QWidget):
         if not phone:
             return True, ""  # Empty is okay
 
-        # Remove all non-digit characters except leading +
-        cleaned = re.sub(r"[^\d+]", "", phone)
-
-        # Must start with + for international format
-        if not cleaned.startswith("+"):
-            # If it doesn't start with +, add it for validation
-            cleaned = "+" + cleaned.lstrip("+")
-
-        # Remove the + for digit counting
-        digits_only = cleaned.lstrip("+")
-
-        # E.164 format: + followed by 1-15 digits
-        if len(digits_only) < 7:
-            return False, "Phone number is too short (minimum 7 digits)"
-
-        if len(digits_only) > 15:
-            return False, "Phone number is too long (maximum 15 digits)"
-
-        # Check it's only digits
-        if not digits_only.isdigit():
-            return False, "Phone number contains invalid characters"
-
-        return True, ""
+        result = validate_phone_number(phone)
+        if result.valid:
+            return True, ""
+        return False, result.error_message or "Invalid phone number format"
 
     def _on_save_clicked(self) -> None:
         """Handle save button click."""
@@ -223,7 +237,5 @@ class ProfileWidget(QWidget):
 
         self.save_button.setText(_("profile.save"))
 
-        # Update parent group box
-        parent_group = self.name_input.parent()
-        if isinstance(parent_group, QGroupBox):
-            parent_group.setTitle(_("profile.title"))
+        # Update group box title
+        self.profile_group.setTitle(_("profile.title"))

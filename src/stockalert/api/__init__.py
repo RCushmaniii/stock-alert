@@ -17,6 +17,6 @@ __all__ = [
     "BaseProvider",
     "FinnhubProvider",
     "ProviderError",
-    "RateLimiter",
     "RateLimitError",
+    "RateLimiter",
 ]

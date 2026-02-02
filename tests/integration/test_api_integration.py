@@ -31,6 +31,17 @@ class TestApiRateLimiterIntegration:
             "pc": 173.25,
             "t": 1704067200,
         }
+        client.symbol_lookup.return_value = {
+            "count": 1,
+            "result": [
+                {
+                    "description": "Microsoft Corporation",
+                    "displaySymbol": "MSFT",
+                    "symbol": "MSFT",
+                    "type": "Common Stock",
+                }
+            ],
+        }
         return client
 
     @pytest.fixture

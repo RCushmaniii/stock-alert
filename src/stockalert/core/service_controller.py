@@ -8,10 +8,16 @@ monitoring service (either as a Windows Service or background process).
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable
 
+from stockalert.core.ipc import (
+    get_service_status as ipc_get_service_status,
+    is_service_running as ipc_is_service_running,
+    send_reload_config,
+    send_stop_service,
+)
 from stockalert.core.windows_service import (
     get_background_process_status,
     get_service_status,
@@ -78,7 +84,7 @@ class ServiceController:
     def get_state(self) -> ServiceState:
         """Get the current service state.
 
-        Checks both Windows Service and background process.
+        Uses IPC (Named Pipe) for reliable detection, falls back to Windows Service check.
 
         Returns:
             ServiceState with current status.
@@ -86,27 +92,27 @@ class ServiceController:
         # First check Windows Service
         if is_service_installed():
             status_str = get_service_status()
-            status_map = {
+            status_map: dict[str, ServiceStatus] = {
                 "running": ServiceStatus.RUNNING,
                 "stopped": ServiceStatus.STOPPED,
                 "starting": ServiceStatus.STARTING,
                 "stopping": ServiceStatus.STOPPING,
             }
-            status = status_map.get(status_str, ServiceStatus.UNKNOWN)
+            status = status_map.get(status_str or "", ServiceStatus.UNKNOWN)
             return ServiceState(
                 status=status,
                 mode=ServiceMode.WINDOWS_SERVICE,
                 message=f"Windows Service: {status_str}",
             )
 
-        # Check background process
-        proc_status = get_background_process_status()
-        if proc_status.get("running"):
+        # Check background process via IPC (Named Pipe) - most reliable method
+        ipc_status = ipc_get_service_status()
+        if ipc_status.get("running"):
             return ServiceState(
                 status=ServiceStatus.RUNNING,
                 mode=ServiceMode.BACKGROUND_PROCESS,
-                pid=proc_status.get("pid"),
-                message=f"Background process: PID {proc_status.get('pid')}",
+                pid=ipc_status.get("pid"),
+                message=f"Background process: PID {ipc_status.get('pid')}",
             )
 
         return ServiceState(
@@ -181,9 +187,18 @@ class ServiceController:
             message = "Service stopped" if success else "Failed to stop service"
 
         elif state.mode == ServiceMode.BACKGROUND_PROCESS:
-            result = stop_background_process()
-            success = result == 0
-            message = "Process stopped" if success else "Failed to stop process"
+            # Try graceful stop via IPC first
+            success = send_stop_service()
+            if success:
+                message = "Process stopped"
+                # Give it a moment to shut down
+                import time
+                time.sleep(0.5)
+            else:
+                # Fallback to forceful stop
+                result = stop_background_process()
+                success = result == 0
+                message = "Process stopped" if success else "Failed to stop process"
 
         else:
             return False, "Unknown service mode"

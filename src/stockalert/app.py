@@ -17,15 +17,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QDialog
 
 from stockalert.core.alert_manager import AlertManager, AlertSettings
+from stockalert.core.api_key_manager import provision_stockalert_api_key
 from stockalert.core.config import ConfigManager
 from stockalert.core.monitor import StockMonitor
-from stockalert.core.windows_service import (
-    get_background_process_status,
-    stop_background_process,
-)
+from stockalert.core.paths import get_app_dir, get_bundled_assets_dir, get_config_path, migrate_config_if_needed
+from stockalert.core.windows_service import get_background_process_status
 from stockalert.i18n.translator import Translator, set_translator
 from stockalert.ui.main_window import MainWindow
 from stockalert.ui.tray_icon import TrayIcon
@@ -56,26 +55,35 @@ class StockAlertApp:
         self.debug = debug
         self.start_minimized = start_minimized
 
-        # Clean up any existing background service before starting
-        # This ensures we're running the latest code after updates
-        self._cleanup_existing_service()
+        # Check for existing background service
+        # In production: connect to it (don't stop it)
+        # In development: optionally stop it to run latest code
+        self._background_service_running = False
+        status = get_background_process_status()
+        if status.get("running"):
+            self._background_service_running = True
+            pid = status.get("pid")
+            logger.info(f"Found existing background service (PID: {pid}), will connect to it")
 
-        # Determine application directory
-        if getattr(sys, "frozen", False):
-            self.app_dir = Path(sys.executable).parent
-        else:
-            # Resolve to absolute path first, then traverse up from src/stockalert/app.py
-            self.app_dir = Path(__file__).resolve().parent.parent.parent
+        # Determine application directory (where exe/assets are)
+        self.app_dir = get_app_dir()
 
         # Set working directory
         os.chdir(self.app_dir)
 
-        # Initialize configuration
-        self.config_path = config_path or self.app_dir / "config.json"
+        # Migrate config from old location if needed (handles upgrades)
+        migrate_config_if_needed()
+
+        # Initialize configuration (stored in AppData for persistence)
+        self.config_path = config_path or get_config_path()
         self.config_manager = ConfigManager(self.config_path)
+
+        # Auto-provision WhatsApp backend API key (transparent to user)
+        provision_stockalert_api_key()
 
         # Initialize translator (locales_dir auto-detected by Translator)
         language = self.config_manager.get("settings.language", "en")
+        logger.info(f"Config language value: '{language}'")
         self.translator = Translator()
         self.translator.set_language(language)
         set_translator(self.translator)
@@ -101,23 +109,6 @@ class StockAlertApp:
             },
         )
 
-    def _cleanup_existing_service(self) -> None:
-        """Stop any existing background service before starting.
-
-        This ensures we're running the latest code after updates or
-        during development when code changes.
-        """
-        status = get_background_process_status()
-        if status.get("running"):
-            pid = status.get("pid")
-            logger.info(f"Found existing background service (PID: {pid}), stopping it...")
-            result = stop_background_process()
-            if result == 0:
-                logger.info("Successfully stopped existing background service")
-            else:
-                logger.warning("Failed to stop existing background service")
-        else:
-            logger.debug("No existing background service found")
 
     def _setup_api_provider(self) -> BaseProvider:
         """Set up the stock data API provider."""
@@ -148,7 +139,8 @@ class StockAlertApp:
         """Set up stock monitoring components."""
         provider = self._setup_api_provider()
 
-        icon_path = self.app_dir / "stock_alert.ico"
+        # Icon is bundled with the app (in _MEIPASS for PyInstaller)
+        icon_path = get_bundled_assets_dir() / "stock_alert.ico"
         alert_settings = self._load_alert_settings()
         self.alert_manager = AlertManager(
             icon_path=icon_path if icon_path.exists() else None,
@@ -180,6 +172,26 @@ class StockAlertApp:
             email_address=profile.get("email", ""),
         )
 
+    def _create_app_icon(self) -> QIcon:
+        """Create a branded app icon programmatically."""
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QIcon
+        
+        # Create 64x64 pixmap with solid orange background
+        pixmap = QPixmap(64, 64)
+        pixmap.fill(QColor("#FF6A3D"))
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw white trend line
+        painter.setPen(QPen(Qt.GlobalColor.white, 4))
+        painter.drawLine(12, 48, 28, 24)
+        painter.drawLine(28, 24, 52, 40)
+        
+        painter.end()
+        return QIcon(pixmap)
+
     def _setup_ui(self) -> None:
         """Set up the PyQt6 user interface."""
         self.main_window = MainWindow(
@@ -188,7 +200,8 @@ class StockAlertApp:
             on_settings_changed=self._on_settings_changed,
         )
 
-        icon_path = self.app_dir / "stock_alert.ico"
+        # Icon is bundled with the app (in _MEIPASS for PyInstaller)
+        icon_path = get_bundled_assets_dir() / "stock_alert.ico"
         self.tray_icon = TrayIcon(
             main_window=self.main_window,
             icon_path=icon_path if icon_path.exists() else None,
@@ -235,14 +248,28 @@ class StockAlertApp:
             self.qt_app.quit()
 
     def start_monitoring(self) -> None:
-        """Start stock price monitoring."""
+        """Start stock price monitoring.
+
+        Will skip if background service is already running to prevent duplicates.
+        """
         if self._is_monitoring:
+            return
+
+        # Check if background service is already running
+        from stockalert.core.windows_service import get_background_process_status
+        bg_status = get_background_process_status()
+        if bg_status.get("running"):
+            pid = bg_status.get("pid", "?")
+            logger.info(f"Background service already running (PID: {pid}), skipping embedded monitoring")
+            # Update tray to show monitoring is active (via background service)
+            if self.tray_icon:
+                self.tray_icon.set_monitoring_state(True)
             return
 
         if not self.monitor:
             self._setup_monitoring()
 
-        logger.info("Starting stock monitoring")
+        logger.info("Starting stock monitoring (embedded mode)")
         self._is_monitoring = True
 
         if self.monitor:
@@ -273,27 +300,27 @@ class StockAlertApp:
         """
         # Create Qt application
         self.qt_app = QApplication(sys.argv)
+        # These fix the "Python" text in the taskbar right-click menu
         self.qt_app.setApplicationName("StockAlert")
+        self.qt_app.setApplicationDisplayName("StockAlert")
         self.qt_app.setApplicationVersion("3.0.0")
-        self.qt_app.setOrganizationName("RC Software")
+        self.qt_app.setOrganizationName("CushLabs")
+        self.qt_app.setOrganizationDomain("cushlabs.ai")
         self.qt_app.setQuitOnLastWindowClosed(False)
+        
+        # Set application-wide icon (affects taskbar)
+        # Use programmatic icon to ensure consistent orange branding
+        self.qt_app.setWindowIcon(self._create_app_icon())
+        logger.info("Set taskbar icon (programmatic orange)")
 
-        # Check for API key before proceeding
-        api_key_valid = self._validate_api_key_on_startup()
-
-        # Check if config was recovered from corruption
-        if self.config_manager.was_recovered:
-            self._show_config_recovery_warning()
-
-        # Set up components
+        # Set up components FIRST (before any dialogs)
         self._setup_monitoring()
         self._setup_ui()
 
-        # Only start monitoring if API key is valid
-        if api_key_valid:
-            self.start_monitoring()
-        else:
-            logger.warning("Monitoring not started - API key not configured")
+        # Explicitly brand the main window (Windows sometimes ignores global app icon)
+        if self.main_window:
+            self.main_window.setWindowIcon(self._create_app_icon())
+            logger.info("Set main window icon explicitly")
 
         # Show window or minimize to tray
         if self.start_minimized:
@@ -308,13 +335,39 @@ class StockAlertApp:
             if self.tray_icon:
                 self.tray_icon.show()
 
-        # If API key is missing, open settings immediately
-        if not api_key_valid and self.main_window:
-            # Use timer to show dialog after window is displayed
-            QTimer.singleShot(500, self._prompt_for_api_key)
+        # Now check for startup warnings/prompts (after UI is visible)
+        # Use timer to show dialogs after window is fully displayed
+        QTimer.singleShot(300, self._show_startup_dialogs)
 
         # Run event loop
         return int(self.qt_app.exec())
+
+    def _show_startup_dialogs(self) -> None:
+        """Show any startup dialogs after window is displayed."""
+        try:
+            # Check if config was recovered from corruption
+            if self.config_manager.was_recovered:
+                self._show_config_recovery_warning()
+
+            # Check if this is a first-time user (show onboarding regardless of API key)
+            onboarding_completed = self.config_manager.get("app.onboarding_completed", False)
+            if not onboarding_completed:
+                logger.info("First-time user detected, showing onboarding dialog")
+                self._show_onboarding_dialog()
+
+            # Check for API key
+            api_key_valid = self._validate_api_key_on_startup()
+
+            if api_key_valid:
+                # Start monitoring now that we know key is valid
+                self.start_monitoring()
+            else:
+                logger.warning("Monitoring not started - API key not configured")
+                # Only prompt if onboarding was already completed (returning user without key)
+                if onboarding_completed:
+                    self._prompt_for_api_key()
+        except Exception as e:
+            logger.exception(f"Error in startup dialogs: {e}")
 
     def _validate_api_key_on_startup(self) -> bool:
         """Validate API key on startup.
@@ -322,23 +375,23 @@ class StockAlertApp:
         Returns:
             True if API key is valid, False otherwise
         """
-        from stockalert.core.api_key_manager import get_api_key, has_api_key, test_api_key
+        try:
+            from stockalert.core.api_key_manager import get_api_key, has_api_key
 
-        if not has_api_key():
-            logger.warning("No API key configured")
-            return False
+            if not has_api_key():
+                logger.warning("No API key configured")
+                return False
 
-        api_key = get_api_key()
-        if not api_key:
-            return False
+            api_key = get_api_key()
+            if not api_key:
+                return False
 
-        # Test the key
-        success, message = test_api_key(api_key)
-        if success:
-            logger.info(f"API key validated: {message}")
+            # Key exists - assume it's valid (don't test on startup to avoid delays)
+            logger.info("API key found")
             return True
-        else:
-            logger.warning(f"API key validation failed: {message}")
+
+        except Exception as e:
+            logger.exception(f"Error checking API key: {e}")
             return False
 
     def _show_config_recovery_warning(self) -> None:
@@ -346,28 +399,48 @@ class StockAlertApp:
         from PyQt6.QtWidgets import QMessageBox
 
         QMessageBox.warning(
-            None,
+            self.main_window,
             "Configuration Recovered",
             "Your configuration file was corrupted and has been reset to defaults.\n\n"
             "A backup of the corrupted file was saved.\n\n"
             "Please re-enter your settings and API key.",
         )
 
+    def _show_onboarding_dialog(self) -> None:
+        """Show onboarding dialog for first-time users."""
+        try:
+            from stockalert.ui.dialogs.onboarding_dialog import OnboardingDialog
+
+            dialog = OnboardingDialog(self.main_window)
+            result = dialog.exec()
+
+            # Mark onboarding as completed regardless of button clicked
+            self.config_manager.set("app.onboarding_completed", True, save=True)
+
+            if result == QDialog.DialogCode.Accepted and self.main_window:
+                # User clicked "Get Started" - go to Profile tab first
+                if hasattr(self.main_window, 'tabs'):
+                    self.main_window.tabs.setCurrentIndex(0)  # Profile tab
+        except Exception as e:
+            logger.exception(f"Error showing onboarding dialog: {e}")
+
     def _prompt_for_api_key(self) -> None:
-        """Prompt user to enter API key."""
-        from PyQt6.QtWidgets import QMessageBox
+        """Prompt user to enter API key (for returning users without key)."""
+        try:
+            from PyQt6.QtWidgets import QMessageBox
+            from stockalert.i18n.translator import _
 
-        result = QMessageBox.information(
-            self.main_window,
-            "API Key Required",
-            "Welcome to StockAlert!\n\n"
-            "To monitor stock prices, you need a Finnhub API key.\n\n"
-            "1. Get a free API key at: https://finnhub.io/register\n"
-            "2. Click OK to open Settings and enter your key\n\n"
-            "The free tier allows monitoring up to 5 stocks.",
-            QMessageBox.StandardButton.Ok,
-        )
+            result = QMessageBox.information(
+                self.main_window,
+                _("onboarding.step2_title"),
+                _("onboarding.step2_desc") + "\n\n" +
+                "Click OK to open Settings and enter your key.",
+                QMessageBox.StandardButton.Ok,
+            )
 
-        if result == QMessageBox.StandardButton.Ok and self.main_window:
-            # Switch to settings tab
-            self.main_window.tab_widget.setCurrentIndex(1)  # Settings tab
+            if result == QMessageBox.StandardButton.Ok and self.main_window:
+                # Switch to settings tab
+                if hasattr(self.main_window, 'tabs'):
+                    self.main_window.tabs.setCurrentIndex(1)  # Settings tab
+        except Exception as e:
+            logger.exception(f"Error in API key prompt: {e}")

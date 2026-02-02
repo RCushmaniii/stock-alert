@@ -62,8 +62,8 @@ def _get_python_executable() -> str:
 def _get_service_script() -> str:
     """Get the path to the service script."""
     if getattr(sys, "frozen", False):
-        # Running as compiled exe
-        return str(Path(sys.executable).parent / "stockalert-service.exe")
+        # Running as compiled exe - use main exe with --service flag
+        return sys.executable
     else:
         # Running from source
         return str(Path(__file__).resolve().parent.parent / "service.py")
@@ -89,7 +89,7 @@ def is_admin() -> bool:
     """Check if running with administrator privileges."""
     try:
         import ctypes
-        return ctypes.windll.shell32.IsUserAnAdmin() != 0
+        return bool(ctypes.windll.shell32.IsUserAnAdmin() != 0)
     except Exception:
         return False
 
@@ -198,7 +198,7 @@ def install_service() -> int:
         logger.info(f"Service '{SERVICE_NAME}' installed successfully")
         print(f"Service '{SERVICE_NAME}' installed successfully.")
         print("The service will start automatically on system boot.")
-        print(f"To start now, run: python -m stockalert.service --start")
+        print("To start now, run: python -m stockalert.service --start")
         return 0
 
     except Exception as e:
@@ -356,23 +356,30 @@ def start_background_process() -> int:
     The process will run until the system restarts or it's manually stopped.
 
     Returns:
-        Process ID on success, -1 on failure.
+        Process ID on success, -1 on failure, existing PID if already running.
     """
+    # Check if already running to prevent duplicates
+    status = get_background_process_status()
+    if status.get("running"):
+        existing_pid = status.get("pid", -1)
+        logger.info(f"Background process already running (PID: {existing_pid})")
+        print(f"StockAlert monitoring already running (PID: {existing_pid})")
+        return existing_pid
+
     try:
         if getattr(sys, "frozen", False):
-            # Running as compiled exe
-            cmd = [_get_service_script()]
+            # Running as compiled exe - use main exe with --service flag
+            cmd = [_get_service_script(), "--service"]
             cwd = None
             env = None
+            logger.info(f"Starting service (frozen): cmd={cmd}")
         else:
             # Running from source - use module invocation for correct imports
+            # Use python.exe (not pythonw.exe) - CREATE_NO_WINDOW flag hides console
             python_exe = _get_python_executable()
-            pythonw_exe = python_exe.replace("python.exe", "pythonw.exe")
-            if not Path(pythonw_exe).exists():
-                pythonw_exe = python_exe
 
             # Run as module: python -m stockalert.service
-            cmd = [pythonw_exe, "-m", "stockalert.service"]
+            cmd = [python_exe, "-m", "stockalert.service"]
 
             # Set working directory to src folder for correct module resolution
             src_dir = Path(__file__).resolve().parent.parent.parent
@@ -380,6 +387,8 @@ def start_background_process() -> int:
 
             # Copy environment and ensure PYTHONPATH includes src
             env = os.environ.copy()
+
+            logger.info(f"Starting service (source): cmd={cmd}, cwd={cwd}")
 
         # Start the process detached from this console
         if sys.platform == "win32":
@@ -406,7 +415,23 @@ def start_background_process() -> int:
         # Save PID to file for later reference
         pid_file = get_pid_file_path()
         pid_file.write_text(str(process.pid))
+        logger.info(f"PID file written: {pid_file}")
 
+        # Give process a moment to start and check if it's still running
+        import time
+        time.sleep(0.5)
+
+        # Verify process is actually running
+        poll_result = process.poll()
+        if poll_result is not None:
+            logger.error(f"Service process exited immediately with code {poll_result}")
+            print(f"ERROR: Service process exited with code {poll_result}")
+            # Clean up PID file since process died
+            if pid_file.exists():
+                pid_file.unlink()
+            return -1
+
+        logger.info(f"Service process verified running (PID: {process.pid})")
         return process.pid
 
     except Exception as e:
@@ -462,20 +487,23 @@ def get_background_process_status() -> dict:
     pid_file = get_pid_file_path()
 
     if not pid_file.exists():
-        return {"running": False}
+        # Also check for any running StockAlert processes without PID file
+        return _find_stockalert_process()
 
     try:
         pid = int(pid_file.read_text().strip())
 
-        # Check if process is running
+        # Check if process is running AND is actually StockAlert
         if sys.platform == "win32":
             result = subprocess.run(
-                ["tasklist", "/FI", f"PID eq {pid}"],
+                ["tasklist", "/FI", f"PID eq {pid}", "/V", "/FO", "CSV"],
                 capture_output=True,
                 text=True,
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
-            if str(pid) in result.stdout:
+            # Check if it's a python/stockalert process
+            output = result.stdout.lower()
+            if str(pid) in output and ("python" in output or "stockalert" in output):
                 return {"running": True, "pid": pid}
         else:
             try:
@@ -484,9 +512,186 @@ def get_background_process_status() -> dict:
             except ProcessLookupError:
                 pass
 
-        # Process not running, clean up stale PID file
+        # PID file exists but process not running, clean up stale PID file
+        logger.info(f"Cleaning up stale PID file (PID {pid} not running)")
         pid_file.unlink()
-        return {"running": False}
+
+        # Check if there's another StockAlert process running
+        return _find_stockalert_process()
 
     except (ValueError, OSError):
         return {"running": False}
+
+
+def _find_stockalert_process() -> dict:
+    """Find any running StockAlert background process.
+
+    This is a fallback when PID file is missing/stale.
+
+    Returns:
+        Dictionary with 'running' bool and optional 'pid' int.
+    """
+    if sys.platform != "win32":
+        return {"running": False}
+
+    try:
+        # Use WMIC to find pythonw processes running stockalert.service
+        result = subprocess.run(
+            ["wmic", "process", "where",
+             "name='pythonw.exe' or name='StockAlert-Service.exe'",
+             "get", "processid,commandline", "/format:csv"],
+            capture_output=True,
+            text=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+
+        # Debug: log raw WMIC output
+        logger.debug(f"WMIC output (returncode={result.returncode}): {repr(result.stdout)}")
+
+        for line in result.stdout.splitlines():
+            line_stripped = line.strip()
+            if not line_stripped or line_stripped.startswith("Node"):
+                continue  # Skip empty lines and header
+
+            line_lower = line_stripped.lower()
+            # Look specifically for "-m stockalert.service" module invocation
+            # This avoids matching other scripts that just mention "stockalert"
+            if "-m stockalert.service" in line_lower or "stockalert-service.exe" in line_lower:
+                # Extract PID (last field in CSV)
+                parts = line.strip().split(",")
+                if parts and parts[-1].isdigit():
+                    pid = int(parts[-1])
+                    logger.info(f"Found orphan StockAlert service process: PID {pid}")
+                    # Update PID file
+                    pid_file = get_pid_file_path()
+                    pid_file.write_text(str(pid))
+                    return {"running": True, "pid": pid}
+
+        return {"running": False}
+
+    except Exception as e:
+        logger.debug(f"Error finding StockAlert process: {e}")
+        return {"running": False}
+
+
+def get_startup_folder() -> Path:
+    """Get the Windows Startup folder path.
+
+    Returns:
+        Path to the user's Startup folder
+    """
+    if sys.platform == "win32":
+        startup = Path(os.environ.get("APPDATA", "")) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
+        return startup
+    return Path.home()
+
+
+def is_autostart_enabled() -> bool:
+    """Check if StockAlert is configured to start with Windows.
+
+    Returns:
+        True if autostart is enabled
+    """
+    startup_folder = get_startup_folder()
+    shortcut_path = startup_folder / "StockAlert.lnk"
+    return shortcut_path.exists()
+
+
+def enable_autostart() -> tuple[bool, str]:
+    """Enable StockAlert to start automatically with Windows.
+
+    Creates a shortcut in the Windows Startup folder (no admin required).
+
+    Returns:
+        Tuple of (success, message)
+    """
+    try:
+        startup_folder = get_startup_folder()
+        if not startup_folder.exists():
+            return False, f"Startup folder not found: {startup_folder}"
+
+        shortcut_path = startup_folder / "StockAlert.lnk"
+
+        # Get the path to the service script
+        if getattr(sys, "frozen", False):
+            # Running as compiled exe
+            target_path = Path(sys.executable).parent / "stockalert-service.exe"
+            if not target_path.exists():
+                target_path = Path(sys.executable)
+        else:
+            # Running from source - create a batch file to run the service
+            target_path = _create_service_batch_file()
+
+        # Create Windows shortcut using PowerShell (no admin required)
+        ps_script = f'''
+$WshShell = New-Object -ComObject WScript.Shell
+$Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
+$Shortcut.TargetPath = "{target_path}"
+$Shortcut.Arguments = "--service"
+$Shortcut.WorkingDirectory = "{target_path.parent}"
+$Shortcut.Description = "StockAlert Background Service"
+$Shortcut.Save()
+'''
+        result = subprocess.run(
+            ["powershell", "-Command", ps_script],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+
+        if result.returncode == 0:
+            logger.info(f"Created autostart shortcut at {shortcut_path}")
+            return True, "StockAlert will now start automatically with Windows"
+        else:
+            logger.error(f"Failed to create shortcut: {result.stderr}")
+            return False, f"Failed to create shortcut: {result.stderr}"
+
+    except Exception as e:
+        logger.exception(f"Error enabling autostart: {e}")
+        return False, str(e)
+
+
+def disable_autostart() -> tuple[bool, str]:
+    """Disable StockAlert from starting automatically with Windows.
+
+    Removes the shortcut from the Windows Startup folder.
+
+    Returns:
+        Tuple of (success, message)
+    """
+    try:
+        startup_folder = get_startup_folder()
+        shortcut_path = startup_folder / "StockAlert.lnk"
+
+        if shortcut_path.exists():
+            shortcut_path.unlink()
+            logger.info(f"Removed autostart shortcut from {shortcut_path}")
+            return True, "StockAlert will no longer start automatically with Windows"
+        else:
+            return True, "Autostart was not enabled"
+
+    except Exception as e:
+        logger.exception(f"Error disabling autostart: {e}")
+        return False, str(e)
+
+
+def _create_service_batch_file() -> Path:
+    """Create a batch file to run the service from source.
+
+    Returns:
+        Path to the batch file
+    """
+    app_data = get_app_data_dir()
+    batch_path = app_data / "start_service.bat"
+
+    # Find the Python executable and source directory
+    python_exe = sys.executable
+    src_dir = Path(__file__).parent.parent.parent  # stockalert package root
+
+    batch_content = f'''@echo off
+cd /d "{src_dir}"
+"{python_exe}" -m stockalert.service
+'''
+    batch_path.write_text(batch_content)
+    logger.info(f"Created service batch file at {batch_path}")
+    return batch_path

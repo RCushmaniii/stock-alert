@@ -10,9 +10,21 @@ Usage:
 from __future__ import annotations
 
 import atexit
+import ctypes
 import os
 import sys
 import tempfile
+
+# Set Windows App User Model ID so taskbar shows our icon, not Python's
+# This MUST be done before any Qt imports
+if sys.platform == "win32":
+    try:
+        # Use unique App ID - this tells Windows this is NOT generic python.exe
+        # Increment version to force Windows to refresh cached icon
+        myappid = 'CushLabs.StockAlert.GUI.3.1'
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+    except Exception:
+        pass
 
 # Fix DLL search path on Windows to avoid conflicts with Git's OpenSSL
 if sys.platform == "win32":
@@ -60,6 +72,11 @@ def parse_args() -> argparse.Namespace:
         "--debug",
         action="store_true",
         help="Enable debug mode",
+    )
+    parser.add_argument(
+        "--service",
+        action="store_true",
+        help="Run as background monitoring service (no GUI)",
     )
     parser.add_argument(
         "--version",
@@ -153,8 +170,13 @@ def main() -> int:
     """Main entry point for StockAlert."""
     args = parse_args()
 
-    # Check for existing instance
-    instance_lock = InstanceLock("StockAlert")
+    # If --service flag is passed, run as headless monitoring service
+    if args.service:
+        from stockalert.service import run_foreground
+        return run_foreground(config_path=args.config, debug=args.debug)
+
+    # Check for existing GUI instance (separate from service)
+    instance_lock = InstanceLock("StockAlertGUI")
     if not instance_lock.acquire():
         # Another instance is running - show message and exit
         print("StockAlert is already running.", file=sys.stderr)
@@ -177,10 +199,18 @@ def main() -> int:
 
         return 1
 
-    # Set up logging early
+    # Set up logging early - write to file for debugging
+    from pathlib import Path
+
     from stockalert.utils.logging_config import setup_logging
 
-    setup_logging(debug=args.debug)
+    # Log to file in same directory as executable (or project root in dev)
+    if getattr(sys, "frozen", False):
+        log_path = Path(sys.executable).parent / "stockalert.log"
+    else:
+        log_path = Path(__file__).parent.parent.parent / "stockalert.log"
+
+    setup_logging(debug=args.debug, log_file=log_path)
 
     # Import app after logging is set up
     from stockalert.app import StockAlertApp

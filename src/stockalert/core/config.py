@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Default configuration structure
 DEFAULT_CONFIG: dict[str, Any] = {
-    "version": "3.0.0",
+    "version": "4.0.0",
     "settings": {
         "check_interval": 60,
         "cooldown": 300,
@@ -163,6 +163,14 @@ class ConfigManager:
                     }
 
                 self._config["version"] = "3.0.0"
+                config_version = "3.0.0"
+
+            if config_version < "4.0.0":
+                # Migrate from v3.x to v4.0.0
+                logger.info(f"Migrating config from v{config_version} to v4.0.0")
+                # v4.0.0: WhatsApp API key is now auto-provisioned (no user config needed)
+                # No migration needed - just bump version
+                self._config["version"] = "4.0.0"
                 self._save()
 
     def _validate(self) -> None:
@@ -190,9 +198,21 @@ class ConfigManager:
                         )
 
     def _save(self) -> None:
-        """Save configuration to file."""
+        """Save configuration to file.
+
+        Merges current in-memory config with any external changes to the file
+        (like api_key written by api_key_manager) before saving.
+        """
         with self._lock:
             try:
+                # Read current file to pick up any external changes (e.g., api_key)
+                if self.config_path.exists():
+                    with open(self.config_path, encoding="utf-8") as f:
+                        file_config = json.load(f)
+                    # Preserve api_key if it exists in file but not in our config
+                    if "api_key" in file_config and "api_key" not in self._config:
+                        self._config["api_key"] = file_config["api_key"]
+
                 with open(self.config_path, "w", encoding="utf-8") as f:
                     json.dump(self._config, f, indent=2)
                 logger.debug(f"Saved configuration to {self.config_path}")

@@ -173,28 +173,29 @@ class AlertManager:
 
     def _init_notification_services(self) -> None:
         """Initialize notification services for SMS/WhatsApp."""
-        # Try backend API first (production mode)
+        # Try local Twilio FIRST (has WhatsApp template configured)
         try:
-            from stockalert.core.notification_service import NotificationService
-            self._notification_service = NotificationService()
-            if self._notification_service.is_configured:
-                logger.info("Backend notification service initialized for WhatsApp alerts")
-        except Exception as e:
-            logger.debug(f"Backend notification service not available: {e}")
-            self._notification_service = None
-
-        # Fall back to direct Twilio (development mode)
-        if not self._notification_service or not self._notification_service.is_configured:
-            try:
-                from stockalert.core.twilio_service import TwilioService
-                self._twilio_service = TwilioService()
-                if self._twilio_service.is_configured:
-                    logger.info("Twilio service initialized for SMS/WhatsApp alerts")
-                else:
-                    logger.warning("Twilio not configured - SMS/WhatsApp alerts disabled")
-            except Exception as e:
-                logger.error(f"Failed to initialize Twilio service: {e}")
+            from stockalert.core.twilio_service import TwilioService
+            self._twilio_service = TwilioService()
+            if self._twilio_service.is_configured:
+                logger.info("Local Twilio service initialized for SMS/WhatsApp alerts")
+            else:
+                logger.debug("Local Twilio not configured")
                 self._twilio_service = None
+        except Exception as e:
+            logger.debug(f"Local Twilio service not available: {e}")
+            self._twilio_service = None
+
+        # Fall back to backend API if local Twilio not available
+        if not self._twilio_service or not self._twilio_service.whatsapp_available:
+            try:
+                from stockalert.core.notification_service import NotificationService
+                self._notification_service = NotificationService()
+                if self._notification_service.is_configured:
+                    logger.info("Backend notification service initialized as fallback")
+            except Exception as e:
+                logger.debug(f"Backend notification service not available: {e}")
+                self._notification_service = None
 
     def update_settings(self, settings: AlertSettings) -> None:
         """Update alert settings.
@@ -244,19 +245,23 @@ class AlertManager:
         current = self._get_text("alerts.current")
         thresh = self._get_text("alerts.threshold")
 
-        # Clean, concise format for both Windows and WhatsApp
+        # Clean, concise format for Windows
         windows_message = f"{symbol} {crossed}\n{current} ${price:.2f}  {thresh} ${threshold:.2f}"
-        whatsapp_message = (
-            f"*{app_title}*\n"
-            f"{symbol} {crossed}\n"
-            f"{current} ${price:.2f}  ${threshold:.2f}"
-        )
+
+        # WhatsApp template variables for approved template:
+        # {{1}} = symbol, {{2}} = price, {{3}} = direction, {{4}} = threshold
+        whatsapp_vars = {
+            "1": symbol,
+            "2": f"{price:.2f}",
+            "3": "above",
+            "4": f"{threshold:.2f}",
+        }
 
         self._send_all_channels(
             title=app_title,
             message=windows_message,
             symbol=symbol,
-            whatsapp_message=whatsapp_message,
+            whatsapp_template_vars=whatsapp_vars,
         )
 
     def send_low_alert(
@@ -283,19 +288,23 @@ class AlertManager:
         current = self._get_text("alerts.current")
         thresh = self._get_text("alerts.threshold")
 
-        # Clean, concise format for both Windows and WhatsApp
+        # Clean, concise format for Windows
         windows_message = f"{symbol} {crossed}\n{current} ${price:.2f}  {thresh} ${threshold:.2f}"
-        whatsapp_message = (
-            f"*{app_title}*\n"
-            f"{symbol} {crossed}\n"
-            f"{current} ${price:.2f}  ${threshold:.2f}"
-        )
+
+        # WhatsApp template variables for approved template:
+        # {{1}} = symbol, {{2}} = price, {{3}} = direction, {{4}} = threshold
+        whatsapp_vars = {
+            "1": symbol,
+            "2": f"{price:.2f}",
+            "3": "below",
+            "4": f"{threshold:.2f}",
+        }
 
         self._send_all_channels(
             title=app_title,
             message=windows_message,
             symbol=symbol,
-            whatsapp_message=whatsapp_message,
+            whatsapp_template_vars=whatsapp_vars,
         )
 
     def send_info(self, title: str, message: str) -> None:
@@ -330,6 +339,7 @@ class AlertManager:
         message: str,
         symbol: str | None = None,
         whatsapp_message: str | None = None,
+        whatsapp_template_vars: dict | None = None,
     ) -> None:
         """Send notification to all enabled channels.
 
@@ -337,7 +347,8 @@ class AlertManager:
             title: Notification title
             message: Notification message
             symbol: Optional stock symbol for action button
-            whatsapp_message: Optional custom WhatsApp message format
+            whatsapp_message: Optional custom WhatsApp message format (fallback)
+            whatsapp_template_vars: Template variables for WhatsApp Business API
         """
         # Windows notification
         if self.settings.windows_enabled:
@@ -349,7 +360,10 @@ class AlertManager:
 
         # WhatsApp notification
         if self.settings.whatsapp_enabled and self.settings.phone_number:
-            self._send_whatsapp(whatsapp_message or f"*{title}*\n{message}")
+            self._send_whatsapp(
+                whatsapp_message or f"*{title}*\n{message}",
+                template_vars=whatsapp_template_vars,
+            )
 
         # Email notification (future implementation)
         if self.settings.email_enabled and self.settings.email_address:
@@ -433,13 +447,32 @@ class AlertManager:
         except Exception as e:
             logger.exception(f"Failed to send SMS: {e}")
 
-    def _send_whatsapp(self, message: str) -> None:
-        """Send WhatsApp notification via backend API or direct Twilio.
+    def _send_whatsapp(self, message: str, template_vars: dict | None = None) -> None:
+        """Send WhatsApp notification via local Twilio or backend API.
 
         Args:
-            message: Formatted message to send
+            message: Formatted message to send (fallback if no template)
+            template_vars: Template variables for WhatsApp Business API template
+                          Format: {"1": "AAPL", "2": "182.50", "3": "above", "4": "180.00"}
         """
-        # Try backend API first (production mode)
+        # Try local Twilio FIRST (has WhatsApp template configured)
+        if self._twilio_service and self._twilio_service.whatsapp_available:
+            try:
+                success = self._twilio_service.send_whatsapp(
+                    to_number=self.settings.phone_number,
+                    message=message,
+                    use_template=template_vars is not None,
+                    template_variables=template_vars,
+                )
+                if success:
+                    logger.debug("WhatsApp sent via local Twilio")
+                    return
+                else:
+                    logger.warning("Local Twilio send returned False")
+            except Exception as e:
+                logger.warning(f"Local Twilio failed, trying backend API: {e}")
+
+        # Fall back to backend API
         if self._notification_service and self._notification_service.is_configured:
             try:
                 success, result = self._notification_service.send_whatsapp(
@@ -452,24 +485,9 @@ class AlertManager:
                 else:
                     logger.warning(f"Backend API send failed: {result}")
             except Exception as e:
-                logger.warning(f"Backend API failed, trying direct Twilio: {e}")
+                logger.exception(f"Backend API also failed: {e}")
 
-        # Fall back to direct Twilio (development mode)
-        if not self._twilio_service or not self._twilio_service.whatsapp_available:
-            logger.warning("WhatsApp not available")
-            return
-
-        try:
-            success = self._twilio_service.send_whatsapp(
-                to_number=self.settings.phone_number,
-                message=message,
-            )
-            if success:
-                logger.debug("WhatsApp sent via Twilio")
-            else:
-                logger.warning("Twilio send returned False")
-        except Exception as e:
-            logger.exception(f"Failed to send WhatsApp: {e}")
+        logger.warning("WhatsApp not available - both local Twilio and backend failed")
 
     def _send_email(self, title: str, message: str) -> None:
         """Send email notification (future implementation).
@@ -503,7 +521,7 @@ class AlertManager:
             return False, str(e)
 
     def test_whatsapp(self, phone_number: str) -> tuple[bool, str]:
-        """Send a test WhatsApp message.
+        """Send a test WhatsApp message using the approved template.
 
         Args:
             phone_number: Phone number to send test to
@@ -514,51 +532,54 @@ class AlertManager:
         if not phone_number:
             return False, "Phone number not configured"
 
-        test_message = (
-            "*StockAlert Test*\n"
-            "This is a test message. If you receive this, WhatsApp alerts are working!"
-        )
+        # Test using the approved template with sample data
+        test_template_vars = {
+            "1": "TEST",
+            "2": "100.00",
+            "3": "above",
+            "4": "99.00",
+        }
 
-        # Try backend API first (production mode)
-        if not self._notification_service:
+        # Initialize services if needed
+        if not self._twilio_service and not self._notification_service:
             self._init_notification_services()
 
+        # Try local Twilio FIRST (has WhatsApp template configured correctly)
+        if self._twilio_service and self._twilio_service.whatsapp_available:
+            try:
+                logger.info(f"Testing WhatsApp via local Twilio to {phone_number}")
+                success = self._twilio_service.send_whatsapp(
+                    to_number=phone_number,
+                    message="Test alert",
+                    use_template=True,
+                    template_variables=test_template_vars,
+                )
+                if success:
+                    logger.info(f"Test WhatsApp sent via local Twilio to {phone_number}")
+                    return True, "Test message sent successfully via WhatsApp"
+                else:
+                    logger.warning("Local Twilio send returned False")
+                    return False, "Failed to send - check Twilio logs"
+            except Exception as e:
+                logger.warning(f"Local Twilio test exception: {e}")
+                return False, str(e)
+
+        # Fall back to backend API
         if self._notification_service and self._notification_service.is_configured:
             try:
                 logger.info(f"Testing WhatsApp via backend API to {phone_number}")
                 success, result = self._notification_service.send_whatsapp(
                     to_number=phone_number,
-                    message=test_message,
+                    message="Test alert",
                 )
                 if success:
                     logger.info(f"Test WhatsApp sent via backend API to {phone_number}")
                     return True, "Test message sent successfully"
                 else:
-                    # Return the actual error from the backend
                     logger.warning(f"Backend API test failed: {result}")
                     return False, result
             except Exception as e:
                 logger.warning(f"Backend API test exception: {e}")
                 return False, str(e)
 
-        # Fall back to direct Twilio (development mode)
-        if not self._twilio_service:
-            return False, "WhatsApp not available - backend API not configured"
-
-        if not self._twilio_service.whatsapp_available:
-            return False, "WhatsApp not available - check Twilio configuration"
-
-        try:
-            success = self._twilio_service.send_whatsapp(
-                to_number=phone_number,
-                message=test_message,
-            )
-            if success:
-                logger.info(f"Test WhatsApp sent via Twilio to {phone_number}")
-                return True, "Test message sent successfully"
-            else:
-                return False, "Failed to send message - check Twilio logs"
-
-        except Exception as e:
-            logger.exception(f"Failed to send test WhatsApp: {e}")
-            return False, str(e)
+        return False, "WhatsApp not available - configure Twilio credentials in .env"

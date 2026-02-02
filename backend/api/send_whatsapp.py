@@ -166,8 +166,33 @@ def send_whatsapp_message(to_number: str, message: str = None, template_data: di
 class handler(BaseHTTPRequestHandler):
     """Vercel serverless function handler."""
 
+    def _validate_api_key(self) -> bool:
+        """Validate the API key from request header."""
+        expected_key = os.environ.get('API_KEY')
+        if not expected_key:
+            # No API key configured = allow all (development mode)
+            return True
+
+        # Check X-API-Key header
+        provided_key = self.headers.get('X-API-Key')
+        if not provided_key:
+            # Also check Authorization header as fallback
+            auth_header = self.headers.get('Authorization')
+            if auth_header and auth_header.startswith('Bearer '):
+                provided_key = auth_header[7:]
+
+        return provided_key == expected_key
+
     def do_POST(self):
         """Handle POST request to send WhatsApp message."""
+        # Validate API key first
+        if not self._validate_api_key():
+            self.send_response(401)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'error': 'Unauthorized - invalid or missing API key'}).encode())
+            return
+
         # Parse request body
         content_length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(content_length)

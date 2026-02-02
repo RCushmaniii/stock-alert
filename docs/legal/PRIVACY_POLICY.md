@@ -3,7 +3,7 @@
 **StockAlert v3.0**
 **Last Updated: January 2025**
 
-RC Software ("we", "our", or "us") respects your privacy. This Privacy Policy explains how StockAlert handles your information.
+CUSHLABS.AI ("we", "our", or "us") respects your privacy. This Privacy Policy explains how StockAlert handles your information.
 
 ## Summary
 
@@ -38,7 +38,7 @@ StockAlert stores the following information **locally on your computer only**:
 - Alert triggers
 - Error messages for troubleshooting
 
-**This data never leaves your computer** and is not transmitted to RC Software or any third party.
+**This data never leaves your computer** and is not transmitted to CUSHLABS.AI or any third party.
 
 ## Third-Party Services
 
@@ -108,9 +108,9 @@ StockAlert uses open source libraries. These libraries may have their own privac
 
 If you have questions about this Privacy Policy:
 
-RC Software
-Email: privacy@rcsoftware.com
-Website: https://rcsoftware.com
+CUSHLABS.AI
+Email: info@cushlabs.ai
+Website: https://cushlabs.ai
 
 ---
 

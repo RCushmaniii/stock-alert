@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stockalert"
-version = "3.0.0"
+version = "4.0.0"
 description = "Commercial-grade stock price monitoring with Windows notifications"
 readme = "README.md"
 license = {text = "Proprietary"}
 authors = [
-    {name = "Robert Cushman", email = "rcushman@rcsoftware.com"}
+    {name = "Robert Cushman", email = "info@cushlabs.ai"}
 ]
 requires-python = ">=3.10"
 keywords = ["stock", "alert", "monitoring", "windows", "notification", "finnhub"]
@@ -31,11 +31,13 @@ dependencies = [
     "PyQt6>=6.6.0",
     "finnhub-python>=2.4.0",
     "python-dotenv>=1.0.0",
-    "winotify>=1.1.0",
+    "windows-toasts>=1.2.0",
     "pytz>=2024.1",
     "Pillow>=10.0.0",
     "requests>=2.31.0",
     "twilio>=8.0.0",
+    "keyring>=24.0.0",
+    "phonenumbers>=8.0.0",
 ]
 
 [project.optional-dependencies]
@@ -132,9 +134,11 @@ pretty = true
 [[tool.mypy.overrides]]
 module = [
     "finnhub.*",
-    "winotify.*",
+    "windows_toasts.*",
     "PIL.*",
     "pyautogui.*",
+    "twilio",
+    "twilio.*",
 ]
 ignore_missing_imports = true
 

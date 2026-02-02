@@ -9,7 +9,7 @@ By installing, copying, or otherwise using StockAlert ("Software"), you agree to
 
 ## 1. LICENSE GRANT
 
-RC Software ("Licensor") grants you a limited, non-exclusive, non-transferable license to:
+CUSHLABS.AI ("Licensor") grants you a limited, non-exclusive, non-transferable license to:
 
 a) Install and use the Software on a single computer owned or controlled by you
 b) Make one copy of the Software for backup purposes
@@ -28,11 +28,11 @@ f) Use the Software for automated trading or financial transactions
 
 ## 3. INTELLECTUAL PROPERTY
 
-The Software and all copies thereof are proprietary to RC Software and title thereto remains in RC Software. All rights in the Software not specifically granted in this Agreement are reserved to RC Software.
+The Software and all copies thereof are proprietary to CUSHLABS.AI and title thereto remains in CUSHLABS.AI. All rights in the Software not specifically granted in this Agreement are reserved to CUSHLABS.AI.
 
 ## 4. THIRD-PARTY SERVICES
 
-The Software connects to third-party services (Finnhub) for stock market data. Your use of such services is subject to their respective terms of service and privacy policies. RC Software is not responsible for the availability, accuracy, or completeness of third-party data.
+The Software connects to third-party services (Finnhub) for stock market data. Your use of such services is subject to their respective terms of service and privacy policies. CUSHLABS.AI is not responsible for the availability, accuracy, or completeness of third-party data.
 
 ## 5. DISCLAIMER OF WARRANTIES
 
@@ -68,7 +68,7 @@ THE TOTAL LIABILITY OF RC SOFTWARE SHALL NOT EXCEED THE AMOUNT YOU PAID FOR THE 
 
 ## 8. DATA ACCURACY
 
-RC Software makes no guarantees regarding the accuracy, timeliness, or completeness of stock market data. Data is provided by third-party services (Finnhub) and may be delayed or incorrect. You acknowledge that you use the data at your own risk.
+CUSHLABS.AI makes no guarantees regarding the accuracy, timeliness, or completeness of stock market data. Data is provided by third-party services (Finnhub) and may be delayed or incorrect. You acknowledge that you use the data at your own risk.
 
 ## 9. TERMINATION
 
@@ -76,23 +76,23 @@ This license is effective until terminated. It will terminate automatically if y
 
 ## 10. GOVERNING LAW
 
-This Agreement shall be governed by and construed in accordance with the laws of the State of [Your State], United States, without regard to its conflict of law provisions.
+This Agreement shall be governed by and construed in accordance with the laws of the State of Georgia, United States, without regard to its conflict of law provisions.
 
 ## 11. ENTIRE AGREEMENT
 
-This Agreement constitutes the entire agreement between you and RC Software regarding the Software and supersedes all prior agreements and understandings.
+This Agreement constitutes the entire agreement between you and CUSHLABS.AI regarding the Software and supersedes all prior agreements and understandings.
 
 ## 12. AMENDMENTS
 
-RC Software reserves the right to modify this Agreement at any time. Continued use of the Software after such modifications constitutes acceptance of the modified terms.
+CUSHLABS.AI reserves the right to modify this Agreement at any time. Continued use of the Software after such modifications constitutes acceptance of the modified terms.
 
 ## 13. CONTACT INFORMATION
 
 For questions about this Agreement:
 
-RC Software
-Email: legal@rcsoftware.com
-Website: https://rcsoftware.com
+CUSHLABS.AI
+Email: info@cushlabs.ai
+Website: https://cushlabs.ai
 
 ---
 

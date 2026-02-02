@@ -2,13 +2,26 @@
 cx_Freeze setup script for creating StockAlert v3.0 MSI installer.
 
 Usage:
-    python setup.py bdist_msi
+    python setup_msi.py build_exe
+    python setup_msi.py bdist_msi
 
 This will create an MSI installer in the dist/ directory.
 """
 
+import os
 import sys
 from pathlib import Path
+
+# Increase recursion limit for cx_Freeze analyzing PyQt6
+sys.setrecursionlimit(5000)
+
+# Fix DLL search path for PyQt6 before importing cx_Freeze
+if sys.platform == "win32":
+    # Point to PyQt6's Qt binaries, not Conda's Qt5
+    pyqt6_path = Path(sys.prefix) / "Lib" / "site-packages" / "PyQt6" / "Qt6" / "bin"
+    if pyqt6_path.exists():
+        os.environ["PATH"] = str(pyqt6_path) + ";" + os.environ.get("PATH", "")
+        os.add_dll_directory(str(pyqt6_path))
 
 from cx_Freeze import Executable, setup
 
@@ -17,8 +30,8 @@ APP_NAME = "StockAlert"
 APP_VERSION = "3.0.0"
 APP_DESCRIPTION = "Commercial-grade stock price monitoring with Windows notifications"
 APP_AUTHOR = "Robert Cushman"
-APP_COMPANY = "RC Software"
-APP_COPYRIGHT = "Copyright 2024-2025 RC Software"
+APP_COMPANY = "CUSHLABS.AI"
+APP_COPYRIGHT = "Copyright 2024-2025 CUSHLABS.AI"
 
 # Find package data files
 src_dir = Path("src/stockalert")
@@ -31,11 +44,9 @@ include_files = [
     ("stock_alert.ico", "stock_alert.ico"),
     # Configuration example
     ("config.example.json", "config.example.json"),
-    # Environment template
-    (".env.example", ".env.example"),
     # Documentation
-    ("docs/user_guide/en/USER_GUIDE.md", "docs/USER_GUIDE.md"),
-    ("docs/user_guide/es/USER_GUIDE.md", "docs/USER_GUIDE_ES.md"),
+    ("docs/user/USER_GUIDE_EN.md", "docs/USER_GUIDE.md"),
+    ("docs/user/USER_GUIDE_ES.md", "docs/USER_GUIDE_ES.md"),
     ("docs/legal/EULA.md", "docs/EULA.md"),
     ("docs/legal/PRIVACY_POLICY.md", "docs/PRIVACY_POLICY.md"),
     ("docs/legal/THIRD_PARTY_LICENSES.md", "docs/THIRD_PARTY_LICENSES.md"),
@@ -59,65 +70,68 @@ for style_file in style_files:
 # Dependencies to include
 build_exe_options = {
     "packages": [
-        # Core packages
+        # Core packages - let cx_Freeze discover submodules
         "stockalert",
-        "stockalert.core",
-        "stockalert.api",
-        "stockalert.ui",
-        "stockalert.ui.dialogs",
-        "stockalert.ui.widgets",
-        "stockalert.i18n",
-        "stockalert.utils",
-        # Third-party packages
+        # PyQt6 must be explicitly included
         "PyQt6",
         "PyQt6.QtCore",
-        "PyQt6.QtGui",
+        "PyQt6.QtGui", 
         "PyQt6.QtWidgets",
+        # Third-party packages
         "finnhub",
         "dotenv",
-        "winotify",
+        "windows_toasts",
         "requests",
         "PIL",
         "pytz",
-        # Standard library
-        "json",
-        "datetime",
-        "time",
-        "os",
-        "sys",
-        "threading",
-        "logging",
-        "pathlib",
+        "twilio",
+        "keyring",
+        # WinRT for Windows notifications (include all subpackages)
+        "winrt",
     ],
     "includes": [
-        "stockalert.core.config",
-        "stockalert.core.monitor",
-        "stockalert.core.alert_manager",
-        "stockalert.api.base",
-        "stockalert.api.finnhub",
-        "stockalert.api.rate_limiter",
-        "stockalert.ui.main_window",
-        "stockalert.ui.tray_icon",
-        "stockalert.ui.dialogs.settings_dialog",
-        "stockalert.ui.dialogs.ticker_dialog",
-        "stockalert.i18n.translator",
-        "stockalert.utils.market_hours",
-        "stockalert.utils.logging_config",
+        # Explicitly include modules that might not be auto-detected
+        "PyQt6.QtCore",
+        "PyQt6.QtGui",
+        "PyQt6.QtWidgets",
+        "PyQt6.QtNetwork",
+        # WinRT modules for windows-toasts notifications
+        "winrt",
+        "winrt.windows.foundation",
+        "winrt.windows.foundation.collections",
+        "winrt.windows.data.xml.dom",
+        "winrt.windows.ui.notifications",
+        # Win32 modules for keyring (Windows Credential Manager)
+        "win32timezone",
+        "win32api",
+        "win32cred",
+        "win32ctypes",
+        "win32ctypes.core",
+        "pywintypes",
+        "keyring.backends",
+        "keyring.backends.Windows",
     ],
     "include_files": include_files,
     "excludes": [
         "test",
         "unittest",
         "pytest",
+        "pytest_qt",
         "tkinter",
         "FreeSimpleGUI",
-        "yfinance",  # Removed in v3.0
-        "pystray",   # Replaced by QSystemTrayIcon
+        "yfinance",
+        "pystray",
+        # Exclude Conda's Qt5 to avoid conflicts
+        "PyQt5",
+        "pyqt",
     ],
     "optimize": 2,
     "include_msvcr": True,
     # Path to source
     "path": ["src"] + sys.path,
+    # Don't zip PyQt6 - it needs DLLs accessible
+    "zip_include_packages": ["*"],
+    "zip_exclude_packages": ["PyQt6"],
 }
 
 # MSI-specific options
@@ -126,12 +140,6 @@ bdist_msi_options = {
     "add_to_path": False,
     "initial_target_dir": r"[ProgramFilesFolder]\StockAlert",
     "install_icon": "stock_alert.ico",
-    # Product metadata
-    "data": {
-        "Manufacturer": APP_COMPANY,
-        "ProductName": APP_NAME,
-        "ProductVersion": APP_VERSION,
-    },
 }
 
 # Define executables
@@ -143,15 +151,7 @@ executables = [
         target_name="StockAlert.exe",
         icon="stock_alert.ico",
         shortcut_name="StockAlert",
-        shortcut_dir="ProgramMenuFolder",
-        copyright=APP_COPYRIGHT,
-    ),
-    # Console version for debugging
-    Executable(
-        script="src/stockalert/__main__.py",
-        base="Console",
-        target_name="StockAlertConsole.exe",
-        icon="stock_alert.ico",
+        shortcut_dir="DesktopFolder",  # Desktop shortcut
         copyright=APP_COPYRIGHT,
     ),
 ]

@@ -1,5 +1,105 @@
 # StockAlert v3.0 - AI Assistant Guidelines
 
+> **IMPORTANT: DO NOT ASSIGN DEVELOPER WORK TO THE USER!**
+> The user is the project manager, NOT a developer. If you need to:
+> - Update code (frontend, backend, Vercel, etc.) → DO IT YOURSELF
+> - Push to git → DO IT YOURSELF
+> - Deploy to Vercel → Push to git, it auto-deploys from `backend/` folder
+> - Install a package or tool → ASK the user to install it
+>
+> NEVER say "copy this code and paste it" or "update this in Vercel dashboard".
+> Just make the changes and push them.
+
+> **IMPORTANT: Read [`docs/LESSONS_LEARNED.md`](docs/LESSONS_LEARNED.md) before making changes!**
+> It contains critical information about build processes, common pitfalls, and solutions to problems encountered during development.
+
+## Quick Reference (from Lessons Learned)
+
+### Build Commands
+```bash
+# Kill running app first (use // for Windows flags in Git Bash)
+taskkill //F //IM StockAlert.exe
+
+# Build (use setup_msi.py, NOT cx_Freeze directly)
+python setup_msi.py build_exe
+
+# Launch for testing
+"./build/exe.win-amd64-3.12/StockAlert.exe" &
+```
+
+### Inno Setup Location (for creating installers)
+```
+%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe
+```
+**NOT** in Program Files - it's in the user's AppData folder!
+
+### Key Gotchas
+- **Config Location**: Stored in `%APPDATA%\StockAlert\config.json` (persists across rebuilds!)
+- **Rate Limiter**: Must be a singleton shared across all FinnhubProvider instances
+- **Startup Dialogs**: Must show AFTER UI is created, via QTimer.singleShot()
+- **API Key Storage**: Keyring fails in frozen exe; uses config.json fallback
+- **Translations**: Always update BOTH en.json AND es.json
+
+---
+
+## WhatsApp/SMS Backend (Vercel)
+
+### Vercel Project
+- **Project URL**: https://vercel.com/rcushmaniii-projects/stockalert-api
+- **API Endpoint**: `https://stockalert-api.vercel.app/api/send_whatsapp` (UNDERSCORE, not hyphen!)
+- **Source Code**: `backend/api/send_whatsapp.py` (auto-deploys on git push)
+
+### Vercel Deployment (CLI Required)
+- The `backend/` folder is NOT auto-deployed via Git
+- **To deploy**: `cd backend && vercel --prod`
+- Vercel CLI must be installed and authenticated
+- Project: `rcushmaniii-projects/stockalert-api`
+- Production URL: `https://stockalert-api.vercel.app`
+
+### Twilio WhatsApp Configuration
+- **Account SID**: (stored in Vercel environment variables)
+- **WhatsApp Number**: (stored in Vercel environment variables)
+- **Template SID**: `HX138b713346901520a4a6d48e21ec3e68` (ai_stock_price_alert_02)
+- **Template Variables**:
+  - `1`: Ticker symbol (e.g., "AAPL")
+  - `2`: Current price (e.g., "182.50")
+  - `3`: Direction ("above" or "below")
+  - `4`: Threshold price (e.g., "180.00")
+
+### IMPORTANT: Templates Required!
+WhatsApp Business numbers CANNOT send freeform messages. You MUST use `template_data`, not `message`. Freeform only works if user messaged you in last 24 hours.
+
+### API Request Format
+```json
+POST /api/send_whatsapp
+{
+  "phone": "+5213315590572",
+  "template_data": {"1": "AAPL", "2": "182.50", "3": "above", "4": "180.00"}
+}
+```
+**Note**: Endpoint is `send_whatsapp` (underscore), NOT `send-whatsapp` (hyphen)!
+
+### Desktop App Integration
+- `src/stockalert/core/twilio_service.py` calls the Vercel API
+- Does NOT use Twilio SDK directly (avoids bundling credentials in exe)
+- Phone numbers are validated via `phone_utils.py` using `phonenumbers` library
+
+### API Key Authentication (Internal)
+The WhatsApp backend requires an API key for authentication. This is **completely invisible to users**:
+- The API key is **embedded in the app** (XOR-obfuscated in `api_key_manager.py`)
+- On startup, `provision_stockalert_api_key()` auto-stores it in Windows Credential Manager
+- Users just toggle "Enable WhatsApp" - no key entry required
+- The key is set in Vercel as `API_KEY` environment variable
+- **DO NOT** expose this key to users or ask them to configure it
+
+### Mexican Phone Numbers
+Mexican mobile numbers are special:
+- Standard format: `+52` + 10 digits (e.g., `+523315590572`)
+- WhatsApp format: `+521` + 10 digits (e.g., `+5213315590572`) - needs the "1" prefix
+- The `phonenumbers` library may reject +521 as "too long" - we handle this specially in `phone_utils.py`
+
+---
+
 ## Project Overview
 
 StockAlert is a commercial-grade Windows desktop application for real-time stock price monitoring with customizable alerts. It runs in the system tray, monitors stock prices during market hours, and sends Windows toast notifications when price thresholds are breached.
@@ -14,7 +114,8 @@ src/stockalert/
 ├── core/                 # Business logic
 │   ├── monitor.py        # Stock price monitoring
 │   ├── alert_manager.py  # Notification handling
-│   └── config.py         # Configuration management
+│   ├── config.py         # Configuration management
+│   └── paths.py          # Persistent path management (AppData)
 ├── api/                  # External API integration
 │   ├── base.py           # Abstract provider interface
 │   ├── finnhub.py        # Finnhub API client
@@ -159,10 +260,23 @@ pip install -e ".[dev]"
 pre-commit install
 ```
 
-### Build MSI
+### Build Executable
 ```bash
-pip install -e ".[build]"
-python setup.py bdist_msi
+# Kill any running instance first
+taskkill //F //IM StockAlert.exe
+
+# Build with cx_Freeze (via setup_msi.py)
+python setup_msi.py build_exe
+
+# Output: build/exe.win-amd64-3.12/StockAlert.exe
+```
+
+### Create Installer (Inno Setup)
+```bash
+# Inno Setup is in AppData, NOT Program Files!
+"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer.iss
+
+# Output: dist/StockAlert_Setup.exe
 ```
 
 ### Linting
@@ -181,9 +295,11 @@ ruff format src/
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `FINNHUB_API_KEY` | Yes | Finnhub API key |
+| `FINNHUB_API_KEY` | Yes | Finnhub API key for stock data (user-provided) |
 | `LOG_LEVEL` | No | Logging level (default: INFO) |
 | `DEBUG_MODE` | No | Enable debug features |
+
+**Note**: The Finnhub API key is stored in `%APPDATA%\StockAlert\config.json` after user enters it in Settings. No `.env` file is needed for production builds.
 
 ## Dependencies
 
@@ -205,10 +321,24 @@ ruff format src/
 
 1. **Market Hours**: The app only actively monitors during US market hours (9:30 AM - 4:00 PM ET, Mon-Fri, excluding holidays)
 
-2. **Rate Limiting**: Finnhub free tier allows 60 calls/minute. With many stocks, check intervals automatically adjust.
+2. **Rate Limiting**: Finnhub free tier allows 60 calls/minute. The rate limiter MUST be a singleton shared across all FinnhubProvider instances (see `api/finnhub.py`).
 
 3. **Thread Safety**: UI updates must happen on the main thread. Use Qt signals for cross-thread communication.
 
 4. **Windows Only**: This app uses Windows-specific features (winotify, system tray). It will not run on Linux/macOS.
 
 5. **Bilingual**: All user-facing text must have entries in both `en.json` and `es.json`.
+
+6. **Startup Order**: Never show dialogs before UI is created. Use `QTimer.singleShot()` to delay startup dialogs.
+
+7. **API Key Storage**: Keyring may fail in frozen exe; `api_key_manager.py` has config.json fallback.
+
+8. **See Also**: [`docs/LESSONS_LEARNED.md`](docs/LESSONS_LEARNED.md) for detailed troubleshooting and patterns.
+
+9. **WhatsApp via Vercel**: Desktop app does NOT call Twilio directly. It calls the Vercel backend API which handles Twilio. See "WhatsApp/SMS Backend" section above.
+
+10. **Phone Validation**: Uses `phonenumbers` library in `core/phone_utils.py`. Mexican numbers with +521 prefix need special handling.
+
+11. **WhatsApp API Key**: The backend authentication key is embedded in the app and auto-provisioned. Users never see or manage this key - they just enable WhatsApp alerts and it works.
+
+12. **Vercel Deployment Protection**: If WhatsApp returns 401, check that Vercel Deployment Protection is disabled for the API project, or verify the embedded API key matches the Vercel `API_KEY` environment variable.

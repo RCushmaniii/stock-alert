@@ -7,10 +7,12 @@ Provides system tray integration using PyQt6's QSystemTrayIcon.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
-from PyQt6.QtGui import QAction, QIcon
+from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QAction, QIcon, QCursor, QPixmap, QPainter, QColor, QPen
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
 from stockalert.i18n.translator import _
@@ -42,7 +44,8 @@ class TrayIcon(QSystemTrayIcon):
             on_quit: Callback when quit is selected
             on_toggle_monitoring: Callback when monitoring is toggled
         """
-        super().__init__()
+        # Pass main_window as parent to ensure proper ownership
+        super().__init__(main_window)
         self.main_window = main_window
         self.translator = translator
         self.on_quit = on_quit
@@ -51,70 +54,90 @@ class TrayIcon(QSystemTrayIcon):
         self._monitoring_enabled = True
         self._ticker_count = 0
 
-        # Set icon
-        if icon_path and icon_path.exists():
-            self.setIcon(QIcon(str(icon_path)))
-        else:
-            # Use a default icon
-            self.setIcon(self._create_default_icon())
+        # 1. Force programmatic branded icon that cannot be 'missing'
+        logger.info("Creating programmatic branded icon for system tray")
+        self.setIcon(self._create_branded_icon())
+        self.setToolTip("StockAlert")
 
-        self.setToolTip(_("tray.title"))
-
-        # Create menu
+        # 2. Create menu with explicit ownership
         self._create_menu()
 
-        # Connect signals
+        # 3. Explicit activation handling
         self.activated.connect(self._on_activated)
+        
+        # 4. Make visible
+        self.setVisible(True)
+        self.show()  # Explicitly call show() as well
+        
+        # Debug: Check if system tray is available
+        if self.isSystemTrayAvailable():
+            logger.info("System tray IS available on this system")
+        else:
+            logger.warning("System tray is NOT available on this system!")
+        
+        if self.isVisible():
+            logger.info("Tray icon reports it IS visible")
+        else:
+            logger.warning("Tray icon reports it is NOT visible!")
+            
+        logger.info("System tray icon initialized")
 
-    def _create_default_icon(self) -> QIcon:
-        """Create a simple default icon."""
-        from PyQt6.QtCore import Qt
-        from PyQt6.QtGui import QPixmap
-
-        pixmap = QPixmap(64, 64)
-        pixmap.fill(Qt.GlobalColor.darkBlue)
-        return QIcon(pixmap)
+    def _create_branded_icon(self) -> QIcon:
+        """Create a branded orange circle icon programmatically."""
+        # Create 16x16 pixmap (standard tray icon size) with SOLID background
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(QColor("#FF6A3D"))  # Solid orange - no transparency
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw White "S" shape for StockAlert
+        painter.setPen(QPen(Qt.GlobalColor.white, 2))
+        painter.drawLine(4, 12, 8, 6)
+        painter.drawLine(8, 6, 12, 10)
+        
+        painter.end()
+        
+        icon = QIcon(pixmap)
+        logger.info(f"Created icon, isNull={icon.isNull()}, sizes={icon.availableSizes()}")
+        return icon
 
     def _create_menu(self) -> None:
-        """Create the context menu."""
+        """Create the context menu with explicit ownership."""
+        # Don't pass parent here - we'll set context menu explicitly
         self.menu = QMenu()
 
         # Show/Hide window
-        self.show_action = QAction(_("tray.menu.show"), self.menu)
+        self.show_action = self.menu.addAction(_("tray.menu.show"))
         self.show_action.triggered.connect(self._toggle_window)
-        self.menu.addAction(self.show_action)
 
         self.menu.addSeparator()
 
         # Monitoring status (disabled, just for display)
-        self.status_action = QAction("", self.menu)
+        self.status_action = self.menu.addAction("")
         self.status_action.setEnabled(False)
-        self.menu.addAction(self.status_action)
 
         # Market status (disabled, just for display)
-        self.market_action = QAction("", self.menu)
+        self.market_action = self.menu.addAction("")
         self.market_action.setEnabled(False)
-        self.menu.addAction(self.market_action)
 
         self.menu.addSeparator()
 
         # Toggle monitoring
-        self.monitor_action = QAction(_("tray.menu.stop_monitoring"), self.menu)
+        self.monitor_action = self.menu.addAction(_("tray.menu.stop_monitoring"))
         self.monitor_action.triggered.connect(self._toggle_monitoring)
-        self.menu.addAction(self.monitor_action)
 
         # Reload config
-        self.reload_action = QAction(_("tray.menu.reload_config"), self.menu)
+        self.reload_action = self.menu.addAction(_("tray.menu.reload_config"))
         self.reload_action.triggered.connect(self._reload_config)
-        self.menu.addAction(self.reload_action)
 
         self.menu.addSeparator()
 
         # Exit
-        self.exit_action = QAction(_("tray.menu.exit"), self.menu)
+        self.exit_action = self.menu.addAction(_("tray.menu.exit"))
         self.exit_action.triggered.connect(self._on_exit)
-        self.menu.addAction(self.exit_action)
 
+        # Crucial: Set the context menu explicitly
         self.setContextMenu(self.menu)
         self._update_status_text()
 
@@ -151,6 +174,14 @@ class TrayIcon(QSystemTrayIcon):
         """Handle tray icon activation."""
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self._toggle_window()
+        elif reason == QSystemTrayIcon.ActivationReason.Trigger:
+            # Single click - show window
+            if not self.main_window.isVisible():
+                self._toggle_window()
+        elif reason == QSystemTrayIcon.ActivationReason.Context:
+            # On Windows, explicitly popup the context menu at cursor position
+            if self.contextMenu():
+                self.contextMenu().popup(QCursor.pos())
 
     def _update_status_text(self) -> None:
         """Update the status text in the menu."""

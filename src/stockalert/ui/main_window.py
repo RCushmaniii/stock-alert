@@ -35,6 +35,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from stockalert.core.paths import get_bundled_assets_dir
 from stockalert.i18n.translator import _
 from stockalert.ui.dialogs.profile_dialog import ProfileWidget
 from stockalert.ui.dialogs.settings_dialog import SettingsWidget
@@ -85,15 +86,27 @@ class MainWindow(QMainWindow):
         self._load_data()
         self._apply_theme(self._current_theme)
         self._restore_window_geometry()
+        # Ensure all UI text matches current language (widgets may have been
+        # created with stale translations if translator was set after import)
+        self.retranslate_ui()
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
         self.setWindowTitle(_("app.name"))
 
-        # Load icon
-        icon_path = Path(__file__).parent.parent.parent.parent / "stock_alert.ico"
+        # Load icon from bundled assets
+        icon_path = get_bundled_assets_dir() / "stock_alert.ico"
         if icon_path.exists():
-            self.setWindowIcon(QIcon(str(icon_path)))
+            icon = QIcon(str(icon_path))
+            if not icon.isNull():
+                self.setWindowIcon(icon)
+                logger.info(f"Loaded window icon from {icon_path}")
+            else:
+                self.setWindowIcon(self._create_app_icon())
+                logger.warning(f"Icon file exists but failed to load: {icon_path}")
+        else:
+            self.setWindowIcon(self._create_app_icon())
+            logger.warning(f"Icon file not found: {icon_path}, using programmatic icon")
 
         # Main central widget
         central_widget = QWidget()
@@ -320,9 +333,9 @@ class MainWindow(QMainWindow):
         # Title and button row
         header_layout = QHBoxLayout()
 
-        title = QLabel(_("tickers.title"))
-        title.setObjectName("sectionTitle")
-        header_layout.addWidget(title)
+        self.tickers_title = QLabel(_("tickers.title"))
+        self.tickers_title.setObjectName("sectionTitle")
+        header_layout.addWidget(self.tickers_title)
 
         # Ticker count indicator (free tier limit)
         self.ticker_count_label = QLabel()
@@ -576,7 +589,12 @@ class MainWindow(QMainWindow):
         self._current_theme = theme
         # Handle frozen exe vs development
         if getattr(sys, "frozen", False):
-            style_path = Path(sys.executable).parent / "lib" / "stockalert" / "ui" / "styles" / "theme.qss"
+            if hasattr(sys, "_MEIPASS"):
+                # PyInstaller bundles data in _MEIPASS
+                style_path = Path(sys._MEIPASS) / "stockalert" / "ui" / "styles" / "theme.qss"
+            else:
+                # cx_Freeze puts data in lib/ subdirectory
+                style_path = Path(sys.executable).parent / "lib" / "stockalert" / "ui" / "styles" / "theme.qss"
         else:
             style_path = Path(__file__).parent / "styles" / "theme.qss"
         if style_path.exists():
@@ -1036,6 +1054,33 @@ QRadioButton::indicator:checked {
     background-color: #2A2A2A;
     border-color: #FF6A3D;
     color: #FFFFFF;
+}
+
+#modeRadio {
+    font-weight: bold;
+    font-size: 14px;
+    color: #FFFFFF;
+    min-height: 24px;
+    spacing: 8px;
+}
+
+#modeRadio::indicator {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    min-height: 18px;
+    border-radius: 9px;
+    border: 2px solid #555555;
+    background-color: #1A1A1A;
+}
+
+#modeRadio::indicator:hover {
+    border-color: #FF6A3D;
+}
+
+#modeRadio::indicator:checked {
+    background-color: #FF6A3D;
+    border-color: #FF6A3D;
 }
 
 /* Form Rows */
@@ -1676,6 +1721,33 @@ QRadioButton::indicator:checked {
     color: #000000;
 }
 
+#modeRadio {
+    font-weight: bold;
+    font-size: 14px;
+    color: #000000;
+    min-height: 24px;
+    spacing: 8px;
+}
+
+#modeRadio::indicator {
+    width: 18px;
+    height: 18px;
+    min-width: 18px;
+    min-height: 18px;
+    border-radius: 9px;
+    border: 2px solid #CCCCCC;
+    background-color: #FFFFFF;
+}
+
+#modeRadio::indicator:hover {
+    border-color: #FF6A3D;
+}
+
+#modeRadio::indicator:checked {
+    background-color: #FF6A3D;
+    border-color: #FF6A3D;
+}
+
 /* Form Rows */
 QFormLayout {
     vertical-spacing: 20px;
@@ -1846,12 +1918,34 @@ QDialog {
 
     def _set_language(self, language: str) -> None:
         """Set the application language."""
+        logger.info(f"Header button: changing language to '{language}'")
         self.translator.set_language(language)
-        self.config_manager.set("settings.language", language)
+        self.config_manager.set("settings.language", language, save=True)
         self._update_lang_buttons(language)
         self.retranslate_ui()
-        if self.on_settings_changed:
-            self.on_settings_changed()
+        # Also retranslate the settings widget if it exists
+        if hasattr(self, 'settings_widget') and self.settings_widget:
+            self.settings_widget.retranslate_ui()
+
+    def _create_app_icon(self) -> QIcon:
+        """Create a branded app icon programmatically."""
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
+        
+        # Create 64x64 pixmap with solid orange background
+        pixmap = QPixmap(64, 64)
+        pixmap.fill(QColor("#FF6A3D"))
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw white trend line
+        painter.setPen(QPen(Qt.GlobalColor.white, 4))
+        painter.drawLine(12, 48, 28, 24)
+        painter.drawLine(28, 24, 52, 40)
+        
+        painter.end()
+        return QIcon(pixmap)
 
     def _toggle_theme(self) -> None:
         """Toggle between dark and light themes."""
@@ -2369,17 +2463,23 @@ QDialog {
     def retranslate_ui(self) -> None:
         """Update UI text after language change."""
         self.setWindowTitle(_("app.name"))
+
+        # Update tab labels - Profile, Settings, Tickers, News, Help
         self.tabs.setTabText(0, _("tabs.profile"))
         self.tabs.setTabText(1, _("tabs.settings"))
         self.tabs.setTabText(2, _("tabs.tickers"))
-        self.tabs.setTabText(3, _("tabs.help"))
+        self.tabs.setTabText(3, _("tabs.news"))
+        self.tabs.setTabText(4, _("tabs.help"))
+
+        # Update child widgets
         self.profile_widget.retranslate_ui()
         self.settings_widget.retranslate_ui()
+        self.news_widget.retranslate_ui()
 
-        # Recreate help tab to update content
-        self.tabs.removeTab(3)
+        # Recreate help tab to update content (it has static text blocks)
+        self.tabs.removeTab(4)
         self.help_widget = self._create_help_tab()
-        self.tabs.insertTab(3, self.help_widget, _("tabs.help"))
+        self.tabs.insertTab(4, self.help_widget, _("tabs.help"))
 
         # Update theme button tooltip
         self._update_theme_icon()
@@ -2390,11 +2490,17 @@ QDialog {
         self.privacy_btn.setText(_("footer.privacy"))
         self.terms_btn.setText(_("footer.terms"))
 
-        # Update ticker table headers
+        # Update tickers tab title
+        self.tickers_title.setText(_("tickers.title"))
+
+        # Update ticker table headers (10 columns)
         self.ticker_table.setHorizontalHeaderLabels([
             "",  # Checkbox column
+            "",  # Logo column
             _("tickers.symbol"),
             _("tickers.name"),
+            _("tickers.industry"),
+            _("tickers.market_cap"),
             _("tickers.high_threshold"),
             _("tickers.low_threshold"),
             _("tickers.last_price"),
@@ -2407,6 +2513,9 @@ QDialog {
         self.delete_button.setText(_("tickers.delete"))
         self.toggle_button.setText(_("tickers.toggle"))
         self.refresh_profiles_button.setText(_("tickers.refresh_profiles"))
+
+        # Update status bar
+        self.status_bar.showMessage(_("status.ready"))
 
     def update_ticker_price(self, symbol: str, price: float | None) -> None:
         """Update the displayed price for a ticker.
@@ -2428,12 +2537,40 @@ QDialog {
 
     def closeEvent(self, event: QCloseEvent | None) -> None:
         """Handle window close - minimize to tray instead of quitting."""
-        # Save window geometry before hiding
+        # Check for unsaved settings changes
+        if hasattr(self, 'settings_widget') and self.settings_widget.has_unsaved_changes():
+            reply = QMessageBox.question(
+                self,
+                _("dialogs.unsaved_changes_title"),
+                _("dialogs.unsaved_changes_message"),
+                QMessageBox.StandardButton.Save |
+                QMessageBox.StandardButton.Discard |
+                QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save
+            )
+
+            if reply == QMessageBox.StandardButton.Save:
+                self.settings_widget._on_save_clicked()
+            elif reply == QMessageBox.StandardButton.Cancel:
+                if event is not None:
+                    event.ignore()
+                return
+
+        # Save window geometry before closing/hiding
         self._save_window_geometry()
 
-        if event is not None:
-            event.ignore()
-        self.hide()
+        # When running from source (development), actually quit on close
+        # When running as installed exe, minimize to tray
+        if not getattr(sys, "frozen", False):
+            # Development mode - actually quit
+            if event is not None:
+                event.accept()
+            QApplication.instance().quit()
+        else:
+            # Production mode - hide to tray
+            if event is not None:
+                event.ignore()
+            self.hide()
 
     def _save_window_geometry(self) -> None:
         """Save window position and size to config."""

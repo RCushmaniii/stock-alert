@@ -18,9 +18,15 @@ logger = logging.getLogger(__name__)
 def _get_locales_dir() -> Path:
     """Get the locales directory, handling both development and frozen exe."""
     if getattr(sys, "frozen", False):
-        # Running as frozen exe (cx_Freeze)
-        exe_dir = Path(sys.executable).parent
-        return exe_dir / "lib" / "stockalert" / "i18n" / "locales"
+        # Running as frozen exe
+        if hasattr(sys, "_MEIPASS"):
+            # PyInstaller bundles data in _MEIPASS
+            base_dir = Path(sys._MEIPASS)
+            return base_dir / "stockalert" / "i18n" / "locales"
+        else:
+            # cx_Freeze puts data in lib/ subdirectory
+            exe_dir = Path(sys.executable).parent
+            return exe_dir / "lib" / "stockalert" / "i18n" / "locales"
     else:
         # Running from source
         return Path(__file__).parent / "locales"

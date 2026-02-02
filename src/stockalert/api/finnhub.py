@@ -17,6 +17,23 @@ from stockalert.api.rate_limiter import RateLimiter, RateLimitError
 
 logger = logging.getLogger(__name__)
 
+# Shared rate limiter singleton - all FinnhubProvider instances share the same
+# rate limiter since they all use the same API key with a global rate limit
+_shared_rate_limiter: RateLimiter | None = None
+_provider_instance_count: int = 0
+
+
+def _get_shared_rate_limiter() -> RateLimiter:
+    """Get or create the shared rate limiter singleton."""
+    global _shared_rate_limiter
+    if _shared_rate_limiter is None:
+        logger.info("Creating shared rate limiter singleton")
+        _shared_rate_limiter = RateLimiter(
+            rate_limit=60,  # Free tier limit
+            burst_size=10,  # Allow short bursts
+        )
+    return _shared_rate_limiter
+
 
 class FinnhubProvider(BaseProvider):
     """Finnhub API provider for stock data.
@@ -35,16 +52,20 @@ class FinnhubProvider(BaseProvider):
         Args:
             api_key: Finnhub API key
         """
+        global _provider_instance_count
+        _provider_instance_count += 1
+
         self._api_key = api_key
         self._client: finnhub.Client | None = None
-        self._rate_limiter = RateLimiter(
-            rate_limit=self.RATE_LIMIT,
-            burst_size=self.BURST_SIZE,
-        )
+        # Use shared rate limiter so all instances respect the global API rate limit
+        self._rate_limiter = _get_shared_rate_limiter()
 
         if api_key:
             self._client = finnhub.Client(api_key=api_key)
-            logger.info("Finnhub provider initialized")
+            logger.info(
+                f"Finnhub provider #{_provider_instance_count} initialized, "
+                f"rate limiter tokens: {self._rate_limiter.tokens:.1f}"
+            )
         else:
             logger.warning("Finnhub API key not provided - running in demo mode")
 
@@ -79,17 +100,25 @@ class FinnhubProvider(BaseProvider):
             ProviderError: If API call fails
             RateLimitError: If rate limit exceeded
         """
+        func_name = getattr(func, "__name__", str(func))
+        logger.debug(f"Making request: {func_name}, tokens before: {self._rate_limiter.tokens:.1f}")
+
         # Acquire rate limit token
         if not self._rate_limiter.acquire(blocking=True, timeout=30.0):
+            logger.warning(f"Rate limit timeout for {func_name}")
             raise RateLimitError(30.0)
 
+        logger.debug(f"Token acquired for {func_name}, tokens after: {self._rate_limiter.tokens:.1f}")
+
         try:
-            return func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            logger.debug(f"Request {func_name} succeeded")
+            return result
         except finnhub.FinnhubAPIException as e:
-            logger.error(f"Finnhub API error: {e}")
+            logger.error(f"Finnhub API error in {func_name}: {e}")
             raise ProviderError(f"API error: {e}") from e
         except Exception as e:
-            logger.exception(f"Unexpected error: {e}")
+            logger.exception(f"Unexpected error in {func_name}: {e}")
             raise ProviderError(f"Unexpected error: {e}") from e
 
     def get_price(self, symbol: str) -> float | None:
@@ -130,7 +159,7 @@ class FinnhubProvider(BaseProvider):
 
             # Finnhub returns 0 for all values if symbol not found
             if quote and quote.get("c", 0) > 0:
-                return quote
+                return dict(quote)  # Explicit cast to satisfy mypy
             return None
 
         except ProviderError:
@@ -209,7 +238,7 @@ class FinnhubProvider(BaseProvider):
         try:
             client = self._ensure_client()
             news = self._make_request(client.general_news, category)
-            return news if news else []
+            return list(news) if news else []
 
         except ProviderError:
             return []
@@ -241,7 +270,7 @@ class FinnhubProvider(BaseProvider):
             news = self._make_request(
                 client.company_news, symbol.upper(), _from=from_date, to=to_date
             )
-            return news if news else []
+            return list(news) if news else []
 
         except ProviderError:
             return []
@@ -273,7 +302,7 @@ class FinnhubProvider(BaseProvider):
             profile = self._make_request(client.company_profile2, symbol=symbol.upper())
 
             if profile and profile.get("name"):
-                return profile
+                return dict(profile)  # Explicit cast to satisfy mypy
             return None
 
         except ProviderError:

@@ -18,12 +18,15 @@ import os
 import signal
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from stockalert.core.alert_manager import AlertManager, AlertSettings
+from stockalert.core.api_key_manager import provision_stockalert_api_key
 from stockalert.core.config import ConfigManager
 from stockalert.core.monitor import StockMonitor
+from stockalert.core.paths import get_app_dir, get_bundled_assets_dir, get_config_path, migrate_config_if_needed
 from stockalert.i18n.translator import Translator, set_translator
 from stockalert.utils.logging_config import setup_logging
 from stockalert.utils.market_hours import MarketHours
@@ -52,15 +55,18 @@ class StockAlertService:
         self._running = False
         self._config_mtime: float = 0
 
-        # Determine application directory
-        if getattr(sys, "frozen", False):
-            self.app_dir = Path(sys.executable).parent
-        else:
-            self.app_dir = Path(__file__).resolve().parent.parent
+        # Determine application directory (where exe/assets are)
+        self.app_dir = get_app_dir()
 
-        # Initialize configuration
-        self.config_path = config_path or self.app_dir / "config.json"
+        # Migrate config from old location if needed (handles upgrades)
+        migrate_config_if_needed()
+
+        # Initialize configuration (stored in AppData for persistence)
+        self.config_path = config_path or get_config_path()
         self.config_manager = ConfigManager(self.config_path)
+
+        # Auto-provision WhatsApp backend API key (transparent to user)
+        provision_stockalert_api_key()
 
         # Initialize translator
         language = self.config_manager.get("settings.language", "en")
@@ -91,9 +97,15 @@ class StockAlertService:
     def _setup_api_provider(self) -> BaseProvider:
         """Set up the stock data API provider."""
         from stockalert.api.finnhub import FinnhubProvider
+        from stockalert.core.api_key_manager import get_api_key
 
-        self._load_env()
-        api_key = os.environ.get("FINNHUB_API_KEY", "")
+        # Try to get API key from secure storage first
+        api_key = get_api_key()
+
+        if not api_key:
+            # Fallback to environment variable
+            self._load_env()
+            api_key = os.environ.get("FINNHUB_API_KEY", "")
 
         if not api_key:
             logger.warning("FINNHUB_API_KEY not set, using demo mode")
@@ -116,7 +128,8 @@ class StockAlertService:
             email_address=profile.get("email", ""),
         )
 
-        icon_path = self.app_dir / "stock_alert.ico"
+        # Icon is bundled with the app (in _MEIPASS for PyInstaller)
+        icon_path = get_bundled_assets_dir() / "stock_alert.ico"
         return AlertManager(
             icon_path=icon_path if icon_path.exists() else None,
             translator=self.translator,
@@ -244,8 +257,8 @@ class StockAlertService:
         """
         self.start()
 
-        # Config check interval (seconds)
-        config_check_interval = 5
+        # Config check interval (seconds) - check once per minute
+        config_check_interval = 60
 
         try:
             while self._running:
@@ -266,9 +279,9 @@ class StockAlertService:
         return self._running
 
 
-def create_signal_handler(service: StockAlertService):
+def create_signal_handler(service: StockAlertService) -> Callable[[int, Any], None]:
     """Create a signal handler for graceful shutdown."""
-    def handler(signum, frame):
+    def handler(signum: int, frame: Any) -> None:
         logger.info(f"Received signal {signum}, shutting down...")
         service.stop()
         sys.exit(0)
@@ -278,6 +291,8 @@ def create_signal_handler(service: StockAlertService):
 def run_foreground(config_path: Path | None = None, debug: bool = False) -> int:
     """Run the service in foreground mode.
 
+    Uses Global Mutex for single-instance guarantee and Named Pipe for IPC.
+
     Args:
         config_path: Path to configuration file
         debug: Enable debug mode
@@ -285,14 +300,71 @@ def run_foreground(config_path: Path | None = None, debug: bool = False) -> int:
     Returns:
         Exit code
     """
-    service = StockAlertService(config_path=config_path, debug=debug)
+    from stockalert.core.ipc import ServiceMutex, NamedPipeServer
 
-    # Set up signal handlers for graceful shutdown
-    signal.signal(signal.SIGINT, create_signal_handler(service))
-    signal.signal(signal.SIGTERM, create_signal_handler(service))
+    # 1. Try to acquire the Global Mutex (single instance check)
+    mutex = ServiceMutex()
+    if not mutex.acquire():
+        logger.warning("Another service instance is already running (mutex held). Exiting.")
+        print("StockAlert service is already running.")
+        return 1
 
-    service.run_forever()
-    return 0
+    logger.info(f"Service starting (PID: {os.getpid()})")
+
+    service: StockAlertService | None = None
+    pipe_server: NamedPipeServer | None = None
+
+    try:
+        # 2. Create the service
+        service = StockAlertService(config_path=config_path, debug=debug)
+
+        # 3. Define command handler for IPC (simple string-based protocol)
+        def handle_command(command: str) -> str:
+            """Handle commands from the Frontend. Returns response string."""
+            import json
+
+            if command == "PING":
+                return "PONG"
+
+            elif command == "STATUS":
+                status = {
+                    "pid": os.getpid(),
+                    "running": service.is_running if service else False,
+                    "ticker_count": service.monitor.ticker_count if service and service.monitor else 0,
+                }
+                return json.dumps(status)
+
+            elif command == "RELOAD_SETTINGS":
+                if service:
+                    service._reload_config()
+                return "SUCCESS: Settings reloaded"
+
+            elif command == "STOP":
+                if service:
+                    service.stop()
+                return "SUCCESS: Stopping"
+
+            else:
+                return f"UNKNOWN: {command}"
+
+        # 4. Start the Named Pipe server for IPC
+        pipe_server = NamedPipeServer(on_command=handle_command)
+        pipe_server.start()
+
+        # 5. Set up signal handlers for graceful shutdown
+        signal.signal(signal.SIGINT, create_signal_handler(service))
+        signal.signal(signal.SIGTERM, create_signal_handler(service))
+
+        # 6. Run the monitoring service
+        service.run_forever()
+        return 0
+
+    finally:
+        # Clean up
+        if pipe_server:
+            pipe_server.stop()
+        mutex.release()
+        logger.info("Service cleanup complete")
 
 
 def main() -> int:

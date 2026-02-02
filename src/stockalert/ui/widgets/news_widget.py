@@ -7,24 +7,22 @@ Fetches and displays news from Finnhub API.
 from __future__ import annotations
 
 import logging
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from PyQt6.QtCore import Qt, QUrl, QThread, pyqtSignal
-from PyQt6.QtGui import QDesktopServices, QPixmap
-from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkRequest, QNetworkReply
+from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
+from PyQt6.QtGui import QDesktopServices, QMouseEvent, QPixmap
+from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PyQt6.QtWidgets import (
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
     QVBoxLayout,
     QWidget,
-    QComboBox,
 )
 
 from stockalert.i18n.translator import _
@@ -115,16 +113,8 @@ class NewsCard(QFrame):
         self.thumbnail = QLabel()
         self.thumbnail.setFixedSize(80, 80)
         self.thumbnail.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.thumbnail.setStyleSheet("""
-            background-color: #2A2A2A;
-            border-radius: 8px;
-        """)
+        self.thumbnail.setObjectName("newsThumbnail")
         self.thumbnail.setText("📰")
-        self.thumbnail.setStyleSheet("""
-            background-color: #2A2A2A;
-            border-radius: 8px;
-            font-size: 32px;
-        """)
         layout.addWidget(self.thumbnail)
 
         # Content area
@@ -152,7 +142,6 @@ class NewsCard(QFrame):
         headline_label = QLabel(headline)
         headline_label.setObjectName("newsHeadline")
         headline_label.setWordWrap(True)
-        headline_label.setStyleSheet("font-weight: bold; font-size: 14px;")
         content_layout.addWidget(headline_label)
 
         # Summary (truncated)
@@ -163,7 +152,6 @@ class NewsCard(QFrame):
             summary_label = QLabel(summary)
             summary_label.setObjectName("newsSummary")
             summary_label.setWordWrap(True)
-            summary_label.setStyleSheet("color: #AAAAAA; font-size: 12px;")
             content_layout.addWidget(summary_label)
 
         # Meta row (source + time)
@@ -172,7 +160,7 @@ class NewsCard(QFrame):
 
         source = self.article.get("source", "Unknown")
         source_label = QLabel(f"📰 {source}")
-        source_label.setStyleSheet("color: #666666; font-size: 11px;")
+        source_label.setObjectName("newsMeta")
         meta_layout.addWidget(source_label)
 
         timestamp = self.article.get("datetime", 0)
@@ -180,28 +168,16 @@ class NewsCard(QFrame):
             dt = datetime.fromtimestamp(timestamp)
             time_str = dt.strftime("%b %d, %I:%M %p")
             time_label = QLabel(f"🕐 {time_str}")
-            time_label.setStyleSheet("color: #666666; font-size: 11px;")
+            time_label.setObjectName("newsMeta")
             meta_layout.addWidget(time_label)
 
         meta_layout.addStretch()
         content_layout.addLayout(meta_layout)
 
         layout.addLayout(content_layout, 1)
+        # Card styling (including hover) is handled by theme in main_window.py
 
-        # Apply card styling
-        self.setStyleSheet("""
-            QFrame#newsCard {
-                background-color: #1A1A1A;
-                border: 1px solid #333333;
-                border-radius: 12px;
-            }
-            QFrame#newsCard:hover {
-                border-color: #FF6A3D;
-                background-color: #222222;
-            }
-        """)
-
-    def mousePressEvent(self, event) -> None:
+    def mousePressEvent(self, event: QMouseEvent | None) -> None:
         """Open article in browser on click."""
         url = self.article.get("url")
         if url:
@@ -246,7 +222,7 @@ class NewsWidget(QWidget):
 
         header_layout.addStretch()
 
-        # News type filter with dropdown arrow
+        # News type filter styled as orange button with arrow
         self.filter_combo = QComboBox()
         self.filter_combo.addItem(_("news.my_stocks"), "stocks")
         self.filter_combo.addItem(_("news.general"), "general")
@@ -254,63 +230,78 @@ class NewsWidget(QWidget):
         self.filter_combo.addItem(_("news.forex"), "forex")
         self.filter_combo.addItem(_("news.mergers"), "merger")
         self.filter_combo.currentIndexChanged.connect(self._on_filter_changed)
-        self.filter_combo.setStyleSheet("""
-            QComboBox {
-                background-color: #2A2A2A;
+        self.filter_combo.setObjectName("newsFilterCombo")
+        self.filter_combo.setFixedHeight(40)
+        self.filter_combo.setMinimumWidth(140)
+
+        # Get path to chevron SVG asset
+        assets_dir = Path(__file__).parent.parent / "assets"
+        chevron_path = (assets_dir / "chevron-down.svg").as_posix()
+
+        self.filter_combo.setStyleSheet(f"""
+            QComboBox#newsFilterCombo {{
+                background-color: #FF6A3D;
                 color: #FFFFFF;
-                border: 1px solid #444444;
+                border: none;
                 border-radius: 6px;
-                padding: 6px 12px;
-                padding-right: 35px;
-                min-width: 120px;
-            }
-            QComboBox:hover {
-                border-color: #FF6A3D;
-            }
-            QComboBox::drop-down {
-                subcontrol-origin: border;
+                padding: 0px 36px 0px 16px;
+                min-width: 140px;
+                font-size: 13px;
+                font-weight: 600;
+            }}
+            QComboBox#newsFilterCombo:hover {{
+                background-color: #FF8560;
+            }}
+            QComboBox#newsFilterCombo::drop-down {{
+                subcontrol-origin: padding;
                 subcontrol-position: center right;
                 width: 30px;
-                height: 100%;
-                background-color: #FF6A3D;
-                border-top-right-radius: 5px;
-                border-bottom-right-radius: 5px;
                 border: none;
-            }
-            QComboBox::down-arrow {
-                image: none;
-                width: 0;
-                height: 0;
-                border-left: 6px solid transparent;
-                border-right: 6px solid transparent;
-                border-top: 8px solid #FFFFFF;
-            }
-            QComboBox:hover::drop-down {
-                background-color: #FF8560;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #2A2A2A;
+            }}
+            QComboBox#newsFilterCombo::down-arrow {{
+                image: url({chevron_path});
+                width: 14px;
+                height: 8px;
+            }}
+            QComboBox#newsFilterCombo QAbstractItemView {{
+                background-color: #1E1E1E;
                 color: #FFFFFF;
                 selection-background-color: #FF6A3D;
-                selection-color: #000000;
+                selection-color: #FFFFFF;
                 border: 1px solid #444444;
-            }
+                border-radius: 4px;
+                outline: none;
+                padding: 4px;
+            }}
+            QComboBox#newsFilterCombo QAbstractItemView::item {{
+                padding: 8px 12px;
+                min-height: 24px;
+                color: #FFFFFF;
+            }}
+            QComboBox#newsFilterCombo QAbstractItemView::item:hover {{
+                background-color: #FF6A3D;
+                color: #FFFFFF;
+            }}
+            QComboBox#newsFilterCombo QAbstractItemView::item:selected {{
+                background-color: #FF6A3D;
+                color: #FFFFFF;
+            }}
         """)
-        self.filter_combo.setFixedHeight(36)
         header_layout.addWidget(self.filter_combo, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         # Refresh button - same height as combo for alignment
         self.refresh_btn = QPushButton(_("news.refresh"))
         self.refresh_btn.setObjectName("actionButton")
-        self.refresh_btn.setFixedHeight(36)
+        self.refresh_btn.setFixedHeight(40)
         self.refresh_btn.clicked.connect(self._load_news)
         self.refresh_btn.setStyleSheet("""
             QPushButton#actionButton {
                 background-color: #FF6A3D;
-                color: #000000;
+                color: #FFFFFF;
                 border: none;
                 border-radius: 6px;
-                padding: 0px 16px;
+                padding: 0px 20px;
+                font-size: 13px;
                 font-weight: 600;
             }
             QPushButton#actionButton:hover {
@@ -328,20 +319,20 @@ class NewsWidget(QWidget):
         layout.addWidget(self.status_label)
 
         # Scrollable news feed
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setObjectName("newsScrollArea")
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll_area.setObjectName("newsScrollArea")
 
         self.news_container = QWidget()
         self.news_layout = QVBoxLayout(self.news_container)
         self.news_layout.setSpacing(12)
         self.news_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        scroll.setWidget(self.news_container)
-        layout.addWidget(scroll, 1)
+        self.scroll_area.setWidget(self.news_container)
+        layout.addWidget(self.scroll_area, 1)
 
-    def _on_filter_changed(self, index: int) -> None:
+    def _on_filter_changed(self, index: int) -> None:  # noqa: ARG002
         """Handle filter change."""
         # Update title based on selection
         filter_text = self.filter_combo.currentText()
@@ -353,19 +344,18 @@ class NewsWidget(QWidget):
         # Clear existing news
         while self.news_layout.count():
             item = self.news_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+            if item is not None:
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
 
         self.status_label.setText(_("news.loading"))
         self.status_label.show()
         self.refresh_btn.setEnabled(False)
 
-        # Get API key
-        from dotenv import load_dotenv
-
-        app_dir = Path(__file__).resolve().parent.parent.parent.parent
-        load_dotenv(app_dir / ".env")
-        api_key = os.environ.get("FINNHUB_API_KEY", "")
+        # Get API key from secure storage
+        from stockalert.core.api_key_manager import get_api_key
+        api_key = get_api_key()
 
         if not api_key:
             self.status_label.setText(_("errors.no_api_key"))
@@ -418,6 +408,24 @@ class NewsWidget(QWidget):
         # Add spacer at end
         self.news_layout.addStretch()
 
+        # Scroll to top AFTER content is added
+        # Process events to ensure layout is complete, then scroll
+        from PyQt6.QtWidgets import QApplication
+        QApplication.processEvents()
+        scrollbar = self.scroll_area.verticalScrollBar()
+        if scrollbar is not None:
+            scrollbar.setValue(0)
+
+        # Also schedule a delayed scroll as backup
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(100, self._scroll_to_top)
+
+    def _scroll_to_top(self) -> None:
+        """Scroll the news feed to the top."""
+        scrollbar = self.scroll_area.verticalScrollBar()
+        if scrollbar is not None:
+            scrollbar.setValue(0)
+
     def _display_flat_news(self, articles: list[dict[str, Any]]) -> None:
         """Display news in a flat list."""
         for article in articles:
@@ -443,17 +451,7 @@ class NewsWidget(QWidget):
             # Create section header
             company_name = self._ticker_names.get(symbol, symbol)
             header = QLabel(f"{symbol} - {company_name}")
-            header.setObjectName("newsGroupHeader")
-            header.setStyleSheet("""
-                QLabel#newsGroupHeader {
-                    font-size: 16px;
-                    font-weight: bold;
-                    color: #FF6A3D;
-                    padding: 16px 0 8px 0;
-                    border-bottom: 1px solid #333333;
-                    margin-bottom: 8px;
-                }
-            """)
+            header.setObjectName("symbolHeader")
             self.news_layout.addWidget(header)
 
             # Add articles for this group
@@ -509,3 +507,19 @@ class NewsWidget(QWidget):
                     """)
 
         reply.deleteLater()
+
+    def retranslate_ui(self) -> None:
+        """Update UI text after language change."""
+        # Update filter combo items
+        self.filter_combo.setItemText(0, _("news.my_stocks"))
+        self.filter_combo.setItemText(1, _("news.general"))
+        self.filter_combo.setItemText(2, _("news.crypto"))
+        self.filter_combo.setItemText(3, _("news.forex"))
+        self.filter_combo.setItemText(4, _("news.mergers"))
+
+        # Update title based on current selection
+        filter_text = self.filter_combo.currentText()
+        self.title_label.setText(_("news.title") + " - " + filter_text)
+
+        # Update refresh button
+        self.refresh_btn.setText(_("news.refresh"))

@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "StockAlert",
-    "version": "3.0.0",
+    "version": "4.0.0",
     "description": "Monitoreo de precios de acciones con notificaciones de Windows"
   },
   "languages": {
@@ -55,18 +55,19 @@
     "cell_help": "Requerido para alertas de WhatsApp (incluir código de país)",
     "save": "Guardar Perfil",
     "saved": "¡Perfil guardado exitosamente!",
-    "save_error": "Error al guardar el perfil"
+    "save_error": "Error al guardar el perfil",
+    "invalid_phone": "Número de teléfono inválido"
   },
   "help": {
     "title": "Ayuda y Consejos",
     "getting_started": "Primeros Pasos",
-    "getting_started_content": "AI StockAlert monitorea tus acciones seleccionadas en tiempo real y envía alertas vía notificaciones de Windows, WhatsApp o correo cuando los precios cruzan tus umbrales definidos.\n\n1. Agrega acciones para monitorear en la pestaña Acciones\n2. Establece umbrales de precio alto y bajo para cada acción\n3. Habilita el Servicio en Segundo Plano en Configuración para recibir alertas 24/7\n4. Cierra la app - ¡el servicio sigue ejecutándose y enviando alertas!",
+    "getting_started_content": "AI StockAlert monitorea tus acciones seleccionadas en tiempo real y envía alertas vía notificaciones de Windows y WhatsApp cuando los precios cruzan tus umbrales definidos.\n\n1. Ingresa tu clave API de Finnhub en Configuración (obtén una gratis en finnhub.io)\n2. Agrega acciones para monitorear en la pestaña Acciones\n3. Establece umbrales de precio alto y bajo para cada acción\n4. Configura tus canales de alerta (Windows, WhatsApp)\n5. Habilita el Servicio en Segundo Plano en Configuración para recibir alertas 24/7",
     "settings_tips": "Consejos de Configuración",
-    "settings_tips_content": "• Intervalo de Verificación: Con qué frecuencia la app obtiene nuevos precios. Valores más bajos significan actualizaciones más frecuentes pero usan más llamadas API. Recomendado: 1-5 minutos para trading activo, 15-30 minutos para monitoreo casual.\n\n• Período de Enfriamiento: Previene alertas repetidas para la misma acción. Después de que se activa una alerta, no recibirás otra para esa acción hasta que expire el enfriamiento. Recomendado: 5-15 minutos.\n\n• Canales de Alerta: Elige cómo quieres ser notificado - notificaciones de Windows, WhatsApp o correo. Puedes habilitar múltiples canales.",
+    "settings_tips_content": "• Clave API: Obtén tu clave API gratuita de Finnhub en finnhub.io/dashboard. Requerida para datos de acciones.\n\n• Intervalo de Verificación: Con qué frecuencia la app obtiene nuevos precios. El mínimo del nivel gratuito es 90 segundos.\n\n• Período de Enfriamiento: Previene alertas repetidas para la misma acción. Después de que se activa una alerta, no recibirás otra para esa acción hasta que expire el enfriamiento. Recomendado: 5-15 minutos.\n\n• Canales de Alerta: Elige notificaciones de Windows y/o WhatsApp. Usa los botones de Probar para verificar que funcionen.",
     "tickers_title": "Gestión de Acciones",
-    "tickers_content": "• Agregar Acción: Ingresa el símbolo de la acción (ej., AAPL, MSFT, GOOGL) y establece tus umbrales de precio.\n\n• Umbral Alto: Serás alertado cuando el precio suba POR ENCIMA de este valor.\n\n• Umbral Bajo: Serás alertado cuando el precio caiga POR DEBAJO de este valor.\n\n• Alternar Habilitado: Desactiva temporalmente el monitoreo de una acción sin eliminarla.",
+    "tickers_content": "• Agregar Acción: Ingresa el símbolo de la acción (ej., AAPL, MSFT, GOOGL) y establece tus umbrales de precio.\n\n• Umbral Alto: Serás alertado cuando el precio suba POR ENCIMA de este valor.\n\n• Umbral Bajo: Serás alertado cuando el precio caiga POR DEBAJO de este valor.\n\n• Alternar Habilitado: Desactiva temporalmente el monitoreo de una acción sin eliminarla.\n\n• Límite del Nivel Gratuito: Se pueden monitorear hasta 15 acciones.",
     "alerts_title": "Entendiendo las Alertas",
-    "alerts_content": "• Las alertas aparecen como notificaciones de Windows cuando una acción cruza tu umbral.\n\n• Haz clic en la notificación para abrir un gráfico de precios de esa acción.\n\n• La app respeta el horario del mercado - sin alertas durante fines de semana o feriados.\n\n• Alertas de WhatsApp: Requiere tu número de teléfono en la pestaña Perfil.",
+    "alerts_content": "• Alertas de Windows: Aparecen como notificaciones en la esquina inferior derecha. Haz clic para abrir un gráfico de precios.\n\n• Alertas de WhatsApp: Requiere tu número de teléfono en la pestaña Perfil y configuración de Twilio.\n\n• La app respeta el horario del mercado - las alertas solo se activan durante las horas del mercado de EE.UU. (9:30 AM - 4:00 PM ET, Lun-Vie).",
     "service_title": "Servicio en Segundo Plano",
     "service_content": "• El Servicio en Segundo Plano permite que StockAlert monitoree precios y envíe alertas incluso cuando la GUI está cerrada.\n\n• Ve a Configuración > Servicio en Segundo Plano y haz clic en 'Iniciar Servicio' para habilitarlo.\n\n• El servicio se ejecuta silenciosamente en segundo plano hasta que lo detengas o reinicies tu computadora.\n\n• Tu configuración y acciones se recogen automáticamente por el servicio cuando guardas cambios."
   },
@@ -74,6 +75,9 @@
     "title": "Configuración de Monitoreo",
     "check_interval": "Intervalo de Verificación",
     "check_interval_help": "Con qué frecuencia verificar los precios de las acciones",
+    "unit_seconds": "segundos",
+    "unit_minutes": "minutos",
+    "unit_hours": "horas",
     "cooldown": "Período de Enfriamiento (segundos)",
     "cooldown_help": "Tiempo entre alertas repetidas para la misma acción",
     "alerts_title": "Canales de Alerta",
@@ -85,22 +89,38 @@
     "alerts_sms_help": "Requiere teléfono celular en la pestaña Perfil",
     "alerts_whatsapp": "Alertas de WhatsApp",
     "alerts_whatsapp_help": "Requiere teléfono celular en la pestaña Perfil",
+    "alerts_whatsapp_requires_phone": "Requiere teléfono celular en la pestaña Perfil",
     "language_title": "Idioma",
     "language": "Idioma de la Aplicación",
     "language_help": "Idioma de visualización de la aplicación",
-    "api_provider": "Proveedor de Datos",
+    "provider_title": "Proveedor",
+    "provider_name": "Nombre",
+    "market_data_title": "Datos del Mercado",
+    "api_provider": "Proveedor",
     "api_provider_help": "Fuente de datos de acciones",
+    "api_key": "Clave API",
+    "api_key_placeholder": "Ingresa tu clave API de Finnhub",
+    "license": "Licencia",
+    "license_free": "Gratis",
+    "api_key_help": "1. Obtén tu clave API gratuita en <a href='https://finnhub.io/dashboard'>finnhub.io/dashboard</a><br/>2. Pega tu clave API en el campo de arriba<br/>3. Haz clic en Probar Conexión",
+    "api_key_configured": "Clave API configurada",
+    "api_key_not_set": "Clave API no configurada",
+    "api_key_pasted": "Clave API pegada del portapapeles",
+    "api_key_empty": "Por favor ingresa una clave API",
+    "paste": "Pegar",
+    "test_connection": "Probar Conexión",
+    "testing_connection": "Probando conexión...",
     "save": "Guardar Configuración",
     "saved": "¡Configuración guardada exitosamente!",
     "save_error": "Error al guardar la configuración",
     "service_title": "Servicio en Segundo Plano",
     "service_status": "Estado del Servicio",
     "service_mode": "Modo de Monitoreo",
-    "service_mode_help": "Elige cómo funciona el monitoreo cuando se cierra la GUI",
-    "mode_embedded": "Integrado (GUI requerida)",
-    "mode_embedded_help": "El monitoreo se detiene cuando cierras la ventana de la GUI",
-    "mode_background": "Servicio en Segundo Plano",
-    "mode_background_help": "El monitoreo continúa incluso después de cerrar la GUI",
+    "service_mode_help": "Elige cómo funciona el monitoreo cuando cierras esta ventana",
+    "mode_embedded": "Solo Con App Abierta",
+    "mode_embedded_help": "Las alertas se detienen cuando cierras esta ventana",
+    "mode_background": "24/7 en Segundo Plano",
+    "mode_background_help": "Las alertas continúan después de cerrar esta ventana",
     "service_start": "Iniciar Servicio",
     "service_start_help": "Iniciar el servicio de monitoreo en segundo plano. Continuará ejecutándose incluso después de cerrar esta ventana.",
     "service_stop": "Detener Servicio",
@@ -109,7 +129,21 @@
     "service_stopping": "Deteniendo servicio...",
     "service_started": "Servicio en segundo plano iniciado",
     "service_stopped": "Servicio en segundo plano detenido",
-    "service_embedded_note": "En modo Integrado, el monitoreo es controlado por la GUI"
+    "service_embedded_note": "En modo Integrado, el monitoreo es controlado por la GUI",
+    "autostart": "Iniciar con Windows",
+    "autostart_help": "Iniciar automáticamente el servicio en segundo plano cuando Windows inicie (sin permisos de administrador)",
+    "interval_limit_title": "Límite del Nivel Gratuito",
+    "interval_limit_message": "El intervalo mínimo de verificación del nivel gratuito es {min_seconds} segundos. Actualiza para monitoreo más rápido.",
+    "free_tier_note": "Nivel gratuito: {max_tickers} acciones, intervalo mínimo de {min_interval}s",
+    "tier_limits": "Límites del Nivel",
+    "tier_limits_free": "Máx {max_tickers} acciones, intervalo mínimo de {min_interval}s",
+    "test": "Probar",
+    "testing_windows": "Enviando notificación de prueba...",
+    "test_windows_success": "¡Notificación de prueba enviada! Revisa tus notificaciones de Windows.",
+    "testing_whatsapp": "Enviando mensaje de prueba a WhatsApp...",
+    "test_whatsapp_success": "¡Mensaje de prueba enviado! Revisa tu WhatsApp.",
+    "test_whatsapp_title": "Prueba de WhatsApp",
+    "test_whatsapp_no_phone": "Por favor configura tu número de teléfono en la pestaña Perfil primero."
   },
   "tickers": {
     "title": "Acciones",
@@ -140,9 +174,16 @@
     "refresh_price": "Actualizar",
     "refresh_profiles": "Actualizar Datos",
     "refreshing_profiles": "Actualizando...",
-    "profiles_refreshed": "Datos de perfil actualizados para {count} acciones"
+    "profiles_refreshed": "Datos de perfil actualizados para {count} acciones",
+    "limit_reached": "Límite del nivel gratuito alcanzado ({limit} acciones máximo). Actualiza para acciones ilimitadas.",
+    "ticker_count": "{current} de {max} acciones"
   },
   "alerts": {
+    "app_title": "AI StockAlert",
+    "crossed_above": "cruzó por encima",
+    "crossed_below": "cruzó por debajo",
+    "current": "Actual:",
+    "threshold": "Umbral:",
     "high": {
       "title": "Alerta Alta de {symbol}",
       "message": "{name} alcanzó ${price:.2f} (umbral: ${threshold:.2f})"
@@ -199,7 +240,9 @@
     "yes": "Sí",
     "no": "No",
     "ok": "Aceptar",
-    "apply": "Aplicar"
+    "apply": "Aplicar",
+    "unsaved_changes_title": "Cambios Sin Guardar",
+    "unsaved_changes_message": "Tienes cambios de configuración sin guardar. ¿Deseas guardarlos antes de cerrar?"
   },
   "errors": {
     "title": "Error",
@@ -230,5 +273,19 @@
     "paused": "En Pausa",
     "error": "Error: {message}",
     "rate_limit": "Limitado - esperando"
+  },
+  "onboarding": {
+    "title": "¡Bienvenido a StockAlert!",
+    "subtitle": "Vamos a configurarte en 3 sencillos pasos:",
+    "step1_title": "1. Completa Tu Perfil",
+    "step1_desc": "Agrega tu nombre, correo electrónico y número de teléfono para recibir alertas personalizadas por correo y WhatsApp.",
+    "step2_title": "2. Agrega Tu Clave API",
+    "step2_desc": "Obtén una clave API gratuita de Finnhub en finnhub.io/register e ingrésala en Configuración. Esto habilita datos de acciones en tiempo real.",
+    "step3_title": "3. Agrega Acciones para Monitorear",
+    "step3_desc": "Ve a la pestaña Acciones y agrega las acciones que deseas seguir. Establece umbrales de precio alto/bajo para activar alertas.",
+    "tip_title": "Consejo Pro:",
+    "tip_desc": "¡Habilita el modo '24/7 en Segundo Plano' en Configuración para recibir alertas incluso cuando esta ventana esté cerrada!",
+    "btn_get_started": "Comenzar",
+    "btn_skip": "Omitir por Ahora"
   }
 }
