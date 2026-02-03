@@ -149,15 +149,20 @@ class ProfileWidget(QWidget):
             self.phone_validation_label.setText("")
             return
 
-        result = validate_phone_number(text)
-        if result.valid:
-            # Simple user-friendly message: ✓ Country
-            display = f"✓ {result.country_name}" if result.country_name else "✓ Valid"
-            self.phone_validation_label.setText(display)
-            self.phone_validation_label.setStyleSheet("color: #22c55e;")
-        else:
-            self.phone_validation_label.setText(result.error_message or _("profile.invalid_phone"))
-            self.phone_validation_label.setStyleSheet("color: #ef4444;")
+        try:
+            result = validate_phone_number(text)
+            if result.valid:
+                # Simple user-friendly message with country
+                display = f"OK - {result.country_name}" if result.country_name else "Valid"
+                self.phone_validation_label.setText(display)
+                self.phone_validation_label.setStyleSheet("color: #22c55e;")
+            else:
+                self.phone_validation_label.setText(result.error_message or _("profile.invalid_phone"))
+                self.phone_validation_label.setStyleSheet("color: #ef4444;")
+        except Exception as e:
+            # Phonenumbers library might not be fully available in frozen exe
+            logger.warning(f"Phone validation failed: {e}")
+            self.phone_validation_label.setText("")
 
     def _validate_phone_number(self, phone: str) -> tuple[bool, str]:
         """Validate phone number using phonenumbers library.

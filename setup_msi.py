@@ -86,6 +86,7 @@ build_exe_options = {
         "pytz",
         "twilio",
         "keyring",
+        "phonenumbers",
         # WinRT for Windows notifications (include all subpackages)
         "winrt",
     ],

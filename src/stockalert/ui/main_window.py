@@ -12,7 +12,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QPoint, Qt, QUrl
+from PyQt6.QtCore import QMetaObject, QPoint, Qt, QTimer, QUrl, Q_ARG, pyqtSlot
 from PyQt6.QtGui import QCloseEvent, QDesktopServices, QIcon, QPixmap
 from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
 from PyQt6.QtWidgets import (
@@ -94,19 +94,9 @@ class MainWindow(QMainWindow):
         """Set up the user interface."""
         self.setWindowTitle(_("app.name"))
 
-        # Load icon from bundled assets
-        icon_path = get_bundled_assets_dir() / "stock_alert.ico"
-        if icon_path.exists():
-            icon = QIcon(str(icon_path))
-            if not icon.isNull():
-                self.setWindowIcon(icon)
-                logger.info(f"Loaded window icon from {icon_path}")
-            else:
-                self.setWindowIcon(self._create_app_icon())
-                logger.warning(f"Icon file exists but failed to load: {icon_path}")
-        else:
-            self.setWindowIcon(self._create_app_icon())
-            logger.warning(f"Icon file not found: {icon_path}, using programmatic icon")
+        # Always use programmatic orange branded icon for consistency
+        self.setWindowIcon(self._create_app_icon())
+        logger.info("Set window icon (programmatic orange)")
 
         # Main central widget
         central_widget = QWidget()
@@ -1928,24 +1918,36 @@ QDialog {
             self.settings_widget.retranslate_ui()
 
     def _create_app_icon(self) -> QIcon:
-        """Create a branded app icon programmatically."""
+        """Create a branded app icon programmatically with multiple sizes."""
         from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
-        
-        # Create 64x64 pixmap with solid orange background
-        pixmap = QPixmap(64, 64)
-        pixmap.fill(QColor("#FF6A3D"))
-        
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # Draw white trend line
-        painter.setPen(QPen(Qt.GlobalColor.white, 4))
-        painter.drawLine(12, 48, 28, 24)
-        painter.drawLine(28, 24, 52, 40)
-        
-        painter.end()
-        return QIcon(pixmap)
+
+        icon = QIcon()
+
+        # Create multiple sizes for Windows DPI scaling
+        for size in [16, 24, 32, 48, 64, 128, 256]:
+            pixmap = QPixmap(size, size)
+            pixmap.fill(QColor("#FF6A3D"))  # Solid orange
+
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+            # Draw white trend line scaled to size
+            scale = size / 64.0
+            pen_width = max(1, int(4 * scale))
+            painter.setPen(QPen(Qt.GlobalColor.white, pen_width))
+
+            # Scaled line coordinates
+            x1, y1 = int(12 * scale), int(48 * scale)
+            x2, y2 = int(28 * scale), int(24 * scale)
+            x3, y3 = int(52 * scale), int(40 * scale)
+            painter.drawLine(x1, y1, x2, y2)
+            painter.drawLine(x2, y2, x3, y3)
+
+            painter.end()
+            icon.addPixmap(pixmap)
+
+        return icon
 
     def _toggle_theme(self) -> None:
         """Toggle between dark and light themes."""
@@ -2278,6 +2280,53 @@ QDialog {
         self._update_action_buttons()
         self._update_select_all_header()
 
+        # Fetch prices asynchronously after table is populated
+        QTimer.singleShot(100, self._fetch_ticker_prices)
+
+    def _fetch_ticker_prices(self) -> None:
+        """Fetch current prices for all tickers using QTimer for responsiveness."""
+        from stockalert.api.finnhub import FinnhubProvider
+        from stockalert.core.api_key_manager import get_api_key
+
+        api_key = get_api_key()
+        if not api_key:
+            logger.warning("No API key, cannot fetch prices")
+            return
+
+        # Store state for sequential fetching
+        self._price_fetch_provider = FinnhubProvider(api_key=api_key)
+        self._price_fetch_symbols = [t.get("symbol", "") for t in self.config_manager.get_tickers() if t.get("symbol")]
+        self._price_fetch_index = 0
+
+        # Start fetching first price
+        self._fetch_next_price()
+
+    def _fetch_next_price(self) -> None:
+        """Fetch the next ticker price in the queue."""
+        if not hasattr(self, '_price_fetch_symbols') or self._price_fetch_index >= len(self._price_fetch_symbols):
+            # Done fetching - clean up
+            if hasattr(self, '_price_fetch_provider'):
+                delattr(self, '_price_fetch_provider')
+            if hasattr(self, '_price_fetch_symbols'):
+                delattr(self, '_price_fetch_symbols')
+            if hasattr(self, '_price_fetch_index'):
+                delattr(self, '_price_fetch_index')
+            return
+
+        symbol = self._price_fetch_symbols[self._price_fetch_index]
+        self._price_fetch_index += 1
+
+        try:
+            price = self._price_fetch_provider.get_price(symbol)
+            if price is not None:
+                self.update_ticker_price(symbol, price)
+                logger.debug(f"Updated price for {symbol}: ${price:.2f}")
+        except Exception as e:
+            logger.debug(f"Failed to fetch price for {symbol}: {e}")
+
+        # Schedule next fetch with small delay to keep UI responsive
+        QTimer.singleShot(50, self._fetch_next_price)
+
     def _get_selected_row(self) -> int:
         """Get the currently selected row index, or -1 if none."""
         selection = self.ticker_table.selectedItems()
@@ -2525,9 +2574,9 @@ QDialog {
             price: Current price, or None if unavailable
         """
         for row in range(self.ticker_table.rowCount()):
-            item = self.ticker_table.item(row, 1)  # Column 1 is now symbol
+            item = self.ticker_table.item(row, 2)  # Column 2 = Symbol
             if item and item.text() == symbol:
-                price_item = self.ticker_table.item(row, 5)  # Column 5 is now last price
+                price_item = self.ticker_table.item(row, 8)  # Column 8 = Last Price
                 if price_item:
                     if price is not None:
                         price_item.setText(f"${price:.2f}")

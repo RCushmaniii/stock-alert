@@ -601,6 +601,7 @@ def enable_autostart() -> tuple[bool, str]:
     """Enable StockAlert to start automatically with Windows.
 
     Creates a shortcut in the Windows Startup folder (no admin required).
+    Uses VBS script for source installs to avoid showing console window.
 
     Returns:
         Tuple of (success, message)
@@ -612,24 +613,30 @@ def enable_autostart() -> tuple[bool, str]:
 
         shortcut_path = startup_folder / "StockAlert.lnk"
 
-        # Get the path to the service script
+        # Get the path to the service
         if getattr(sys, "frozen", False):
-            # Running as compiled exe
-            target_path = Path(sys.executable).parent / "stockalert-service.exe"
+            # Running as compiled exe - use the service exe directly
+            target_path = Path(sys.executable).parent / "StockAlert-Service.exe"
             if not target_path.exists():
                 target_path = Path(sys.executable)
+            arguments = "--service"
+            working_dir = str(target_path.parent)
         else:
-            # Running from source - create a batch file to run the service
-            target_path = _create_service_batch_file()
+            # Running from source - use VBS script to avoid console window
+            vbs_path = _create_service_batch_file()
+            target_path = Path("wscript.exe")
+            arguments = f'"{vbs_path}"'
+            working_dir = str(vbs_path.parent)
 
         # Create Windows shortcut using PowerShell (no admin required)
         ps_script = f'''
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
 $Shortcut.TargetPath = "{target_path}"
-$Shortcut.Arguments = "--service"
-$Shortcut.WorkingDirectory = "{target_path.parent}"
+$Shortcut.Arguments = "{arguments}"
+$Shortcut.WorkingDirectory = "{working_dir}"
 $Shortcut.Description = "StockAlert Background Service"
+$Shortcut.WindowStyle = 7
 $Shortcut.Save()
 '''
         result = subprocess.run(
@@ -676,22 +683,27 @@ def disable_autostart() -> tuple[bool, str]:
 
 
 def _create_service_batch_file() -> Path:
-    """Create a batch file to run the service from source.
+    """Create a VBS script to run the service from source without console.
 
     Returns:
-        Path to the batch file
+        Path to the VBS script
     """
     app_data = get_app_data_dir()
-    batch_path = app_data / "start_service.bat"
+    vbs_path = app_data / "start_service.vbs"
 
-    # Find the Python executable and source directory
+    # Find pythonw.exe (no console) and source directory
     python_exe = sys.executable
+    pythonw_exe = python_exe.replace("python.exe", "pythonw.exe")
+    if not Path(pythonw_exe).exists():
+        pythonw_exe = python_exe  # Fallback
+
     src_dir = Path(__file__).parent.parent.parent  # stockalert package root
 
-    batch_content = f'''@echo off
-cd /d "{src_dir}"
-"{python_exe}" -m stockalert.service
+    # Use VBS to run without any window at all
+    vbs_content = f'''Set WshShell = CreateObject("WScript.Shell")
+WshShell.CurrentDirectory = "{src_dir}"
+WshShell.Run """{pythonw_exe}"" -m stockalert.service", 0, False
 '''
-    batch_path.write_text(batch_content)
-    logger.info(f"Created service batch file at {batch_path}")
-    return batch_path
+    vbs_path.write_text(vbs_content)
+    logger.info(f"Created service VBS script at {vbs_path}")
+    return vbs_path

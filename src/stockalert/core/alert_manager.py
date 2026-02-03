@@ -55,7 +55,7 @@ class PendingNotification:
 class AlertManager:
     """Manages stock price alerts and multi-channel notifications."""
 
-    APP_ID = "StockAlert"
+    APP_ID = "AI StockAlert"
 
     def __init__(
         self,
@@ -413,6 +413,11 @@ class AlertManager:
             if symbol:
                 chart_url = f"https://finance.yahoo.com/quote/{symbol}"
                 toast.launch_action = chart_url
+
+            # Disable audio if setting is off
+            if not self.settings.windows_audio:
+                from windows_toasts import ToastAudio
+                toast.audio = ToastAudio(silent=True)
 
             toaster.show_toast(toast)
             logger.debug(f"Windows notification sent: {title}")

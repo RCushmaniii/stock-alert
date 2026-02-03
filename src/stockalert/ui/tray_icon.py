@@ -57,7 +57,7 @@ class TrayIcon(QSystemTrayIcon):
         # 1. Force programmatic branded icon that cannot be 'missing'
         logger.info("Creating programmatic branded icon for system tray")
         self.setIcon(self._create_branded_icon())
-        self.setToolTip("StockAlert")
+        self.setToolTip("AI StockAlert")
 
         # 2. Create menu with explicit ownership
         self._create_menu()
@@ -83,53 +83,93 @@ class TrayIcon(QSystemTrayIcon):
         logger.info("System tray icon initialized")
 
     def _create_branded_icon(self) -> QIcon:
-        """Create a branded orange circle icon programmatically."""
-        # Create 16x16 pixmap (standard tray icon size) with SOLID background
-        pixmap = QPixmap(16, 16)
-        pixmap.fill(QColor("#FF6A3D"))  # Solid orange - no transparency
-        
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # Draw White "S" shape for StockAlert
-        painter.setPen(QPen(Qt.GlobalColor.white, 2))
-        painter.drawLine(4, 12, 8, 6)
-        painter.drawLine(8, 6, 12, 10)
-        
-        painter.end()
-        
-        icon = QIcon(pixmap)
+        """Create a branded orange icon programmatically with multiple sizes."""
+        icon = QIcon()
+
+        # Create multiple sizes for Windows DPI scaling
+        for size in [16, 24, 32, 48, 64, 128, 256]:
+            pixmap = QPixmap(size, size)
+            pixmap.fill(QColor("#FF6A3D"))  # Solid orange
+
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+            # Draw white "$" symbol scaled to size
+            scale = size / 16.0
+            pen_width = max(1, int(2 * scale))
+            painter.setPen(QPen(Qt.GlobalColor.white, pen_width))
+
+            # Draw stylized "S" shape
+            x1, y1 = int(4 * scale), int(12 * scale)
+            x2, y2 = int(8 * scale), int(6 * scale)
+            x3, y3 = int(12 * scale), int(10 * scale)
+            painter.drawLine(x1, y1, x2, y2)
+            painter.drawLine(x2, y2, x3, y3)
+
+            painter.end()
+            icon.addPixmap(pixmap)
+
         logger.info(f"Created icon, isNull={icon.isNull()}, sizes={icon.availableSizes()}")
         return icon
 
     def _create_menu(self) -> None:
         """Create the context menu with explicit ownership."""
-        # Don't pass parent here - we'll set context menu explicitly
         self.menu = QMenu()
+        self.menu.setTitle("AI StockAlert")
 
-        # Show/Hide window
+        # Style the menu for dark theme consistency
+        self.menu.setStyleSheet("""
+            QMenu {
+                background-color: #2d2d2d;
+                color: white;
+                border: 1px solid #555;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 8px 24px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #FF6A3D;
+            }
+            QMenu::item:disabled {
+                color: #888;
+            }
+            QMenu::separator {
+                height: 1px;
+                background-color: #555;
+                margin: 4px 8px;
+            }
+        """)
+
+        # App name header (bold, non-clickable)
+        self.title_action = self.menu.addAction("AI StockAlert")
+        self.title_action.setEnabled(False)
+        # Make the title stand out with custom font
+        font = self.title_action.font()
+        font.setBold(True)
+        self.title_action.setFont(font)
+
+        self.menu.addSeparator()
+
+        # Open/Show window
         self.show_action = self.menu.addAction(_("tray.menu.show"))
         self.show_action.triggered.connect(self._toggle_window)
 
         self.menu.addSeparator()
 
-        # Monitoring status (disabled, just for display)
+        # Status section (informational)
         self.status_action = self.menu.addAction("")
         self.status_action.setEnabled(False)
 
-        # Market status (disabled, just for display)
         self.market_action = self.menu.addAction("")
         self.market_action.setEnabled(False)
 
         self.menu.addSeparator()
 
-        # Toggle monitoring
+        # Controls
         self.monitor_action = self.menu.addAction(_("tray.menu.stop_monitoring"))
         self.monitor_action.triggered.connect(self._toggle_monitoring)
-
-        # Reload config
-        self.reload_action = self.menu.addAction(_("tray.menu.reload_config"))
-        self.reload_action.triggered.connect(self._reload_config)
 
         self.menu.addSeparator()
 
@@ -137,7 +177,6 @@ class TrayIcon(QSystemTrayIcon):
         self.exit_action = self.menu.addAction(_("tray.menu.exit"))
         self.exit_action.triggered.connect(self._on_exit)
 
-        # Crucial: Set the context menu explicitly
         self.setContextMenu(self.menu)
         self._update_status_text()
 
@@ -191,10 +230,10 @@ class TrayIcon(QSystemTrayIcon):
 
         if self._monitoring_enabled:
             self.monitor_action.setText(_("tray.menu.stop_monitoring"))
-            self.setToolTip(_("tray.tooltip.monitoring", count=self._ticker_count))
+            self.setToolTip("AI StockAlert - " + _("tray.tooltip.monitoring", count=self._ticker_count))
         else:
             self.monitor_action.setText(_("tray.menu.start_monitoring"))
-            self.setToolTip(_("tray.tooltip.paused"))
+            self.setToolTip("AI StockAlert - " + _("tray.tooltip.paused"))
 
     def set_monitoring_state(self, enabled: bool) -> None:
         """Set the monitoring state.
@@ -227,10 +266,10 @@ class TrayIcon(QSystemTrayIcon):
 
     def update_menu(self) -> None:
         """Update menu text after language change."""
-        self.setToolTip(_("tray.title"))
-        self.show_action.setText(
-            _("tray.menu.hide") if self.main_window.isVisible() else _("tray.menu.show")
-        )
-        self.reload_action.setText(_("tray.menu.reload_config"))
+        self.setToolTip("AI StockAlert")
+        if self.main_window.isVisible():
+            self.show_action.setText(_("tray.menu.hide"))
+        else:
+            self.show_action.setText(_("tray.menu.show"))
         self.exit_action.setText(_("tray.menu.exit"))
         self._update_status_text()

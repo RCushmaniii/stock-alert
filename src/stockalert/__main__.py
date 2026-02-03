@@ -21,7 +21,7 @@ if sys.platform == "win32":
     try:
         # Use unique App ID - this tells Windows this is NOT generic python.exe
         # Increment version to force Windows to refresh cached icon
-        myappid = 'CushLabs.StockAlert.GUI.3.1'
+        myappid = 'CushLabs.AIStockAlert.GUI.4.0'
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     except Exception:
         pass

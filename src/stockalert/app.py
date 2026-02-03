@@ -4,8 +4,12 @@ Main application orchestrator for StockAlert.
 This module coordinates all application components:
 - Configuration management
 - PyQt6 GUI
-- Stock monitoring
 - System tray integration
+
+ARCHITECTURE NOTE:
+The GUI is a PURE FRONTEND. It does NOT do any stock monitoring itself.
+All monitoring is done by the background service (service.py).
+The GUI communicates with the service via IPC (Named Pipes).
 """
 
 from __future__ import annotations
@@ -17,27 +21,31 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QDialog
 
-from stockalert.core.alert_manager import AlertManager, AlertSettings
 from stockalert.core.api_key_manager import provision_stockalert_api_key
 from stockalert.core.config import ConfigManager
-from stockalert.core.monitor import StockMonitor
+from stockalert.core.ipc import is_service_running, get_service_status, send_reload_config
 from stockalert.core.paths import get_app_dir, get_bundled_assets_dir, get_config_path, migrate_config_if_needed
-from stockalert.core.windows_service import get_background_process_status
+from stockalert.core.windows_service import get_background_process_status, start_background_process
 from stockalert.i18n.translator import Translator, set_translator
 from stockalert.ui.main_window import MainWindow
 from stockalert.ui.tray_icon import TrayIcon
 from stockalert.utils.market_hours import MarketHours
 
 if TYPE_CHECKING:
-    from stockalert.api.base import BaseProvider
+    pass
 
 logger = logging.getLogger(__name__)
 
 
 class StockAlertApp:
-    """Main application class coordinating all components."""
+    """Main application class coordinating all components.
+
+    IMPORTANT: This GUI is a PURE FRONTEND. It does NOT do any stock monitoring.
+    All monitoring is delegated to the background service (service.py).
+    """
 
     def __init__(
         self,
@@ -54,16 +62,6 @@ class StockAlertApp:
         """
         self.debug = debug
         self.start_minimized = start_minimized
-
-        # Check for existing background service
-        # In production: connect to it (don't stop it)
-        # In development: optionally stop it to run latest code
-        self._background_service_running = False
-        status = get_background_process_status()
-        if status.get("running"):
-            self._background_service_running = True
-            pid = status.get("pid")
-            logger.info(f"Found existing background service (PID: {pid}), will connect to it")
 
         # Determine application directory (where exe/assets are)
         self.app_dir = get_app_dir()
@@ -88,20 +86,17 @@ class StockAlertApp:
         self.translator.set_language(language)
         set_translator(self.translator)
 
-        # Initialize components (created later during run)
+        # Initialize UI components (created later during run)
         self.qt_app: QApplication | None = None
         self.main_window: MainWindow | None = None
         self.tray_icon: TrayIcon | None = None
-        self.monitor: StockMonitor | None = None
-        self.alert_manager: AlertManager | None = None
         self.market_hours = MarketHours()
 
-        # Monitoring state
-        self._monitoring_timer: QTimer | None = None
-        self._is_monitoring = False
+        # Service status polling timer
+        self._status_timer: QTimer | None = None
 
         logger.info(
-            "StockAlert initialized",
+            "StockAlert GUI initialized",
             extra={
                 "config_path": str(self.config_path),
                 "start_minimized": start_minimized,
@@ -110,87 +105,79 @@ class StockAlertApp:
         )
 
 
-    def _setup_api_provider(self) -> BaseProvider:
-        """Set up the stock data API provider."""
-        from stockalert.api.finnhub import FinnhubProvider
-        from stockalert.core.api_key_manager import get_api_key
+    def _ensure_service_running(self) -> bool:
+        """Ensure the background service is running.
 
-        # Try to get API key from secure storage first
-        api_key = get_api_key()
+        The service runs automatically - users don't need to configure this.
+        This is the "it just works" approach.
 
-        if not api_key:
-            # Fallback to environment variable
-            api_key = os.environ.get("FINNHUB_API_KEY", "")
+        Returns:
+            True if service is running (or was started successfully)
+        """
+        # Check if service is already running
+        if is_service_running():
+            logger.info("Background service is already running")
+            return True
 
-        if not api_key:
-            # Try loading from .env in project root
-            from dotenv import load_dotenv
+        # Auto-start the background service
+        logger.info("Auto-starting background service...")
+        pid = start_background_process()
+        if pid > 0:
+            logger.info(f"Background service started (PID: {pid})")
+            return True
+        else:
+            logger.error("Failed to start background service")
+            return False
 
-            env_path = self.app_dir / ".env"
-            load_dotenv(env_path)
-            api_key = os.environ.get("FINNHUB_API_KEY", "")
+    def _update_service_status(self) -> None:
+        """Update tray icon with current service status."""
+        try:
+            status = get_service_status()
+            running = status.get("running", False)
+            ticker_count = status.get("ticker_count", 0)
 
-        if not api_key:
-            logger.warning("FINNHUB_API_KEY not set, using demo mode")
+            if self.tray_icon:
+                self.tray_icon.set_monitoring_state(running)
+                self.tray_icon.set_ticker_count(ticker_count)
 
-        return FinnhubProvider(api_key=api_key)
+                # Update market status
+                market_status = self.market_hours.get_market_status_message()
+                self.tray_icon.set_market_status(market_status)
 
-    def _setup_monitoring(self) -> None:
-        """Set up stock monitoring components."""
-        provider = self._setup_api_provider()
-
-        # Icon is bundled with the app (in _MEIPASS for PyInstaller)
-        icon_path = get_bundled_assets_dir() / "stock_alert.ico"
-        alert_settings = self._load_alert_settings()
-        self.alert_manager = AlertManager(
-            icon_path=icon_path if icon_path.exists() else None,
-            translator=self.translator,
-            settings=alert_settings,
-        )
-
-        self.monitor = StockMonitor(
-            config_manager=self.config_manager,
-            provider=provider,
-            alert_manager=self.alert_manager,
-            market_hours=self.market_hours,
-            debug=self.debug,
-        )
-
-    def _load_alert_settings(self) -> AlertSettings:
-        """Load alert settings from configuration."""
-        settings = self.config_manager.settings
-        alerts_config = settings.get("alerts", {})
-        profile = self.config_manager.get("profile", {})
-
-        return AlertSettings(
-            windows_enabled=alerts_config.get("windows_enabled", True),
-            windows_audio=alerts_config.get("windows_audio", True),
-            sms_enabled=alerts_config.get("sms_enabled", False),
-            whatsapp_enabled=alerts_config.get("whatsapp_enabled", False),
-            email_enabled=alerts_config.get("email_enabled", False),
-            phone_number=profile.get("cell", ""),
-            email_address=profile.get("email", ""),
-        )
+        except Exception as e:
+            logger.debug(f"Error updating service status: {e}")
 
     def _create_app_icon(self) -> QIcon:
-        """Create a branded app icon programmatically."""
+        """Create a branded app icon programmatically with multiple sizes."""
         from PyQt6.QtCore import Qt
-        from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen, QIcon
-        
-        # Create 64x64 pixmap with solid orange background
-        pixmap = QPixmap(64, 64)
-        pixmap.fill(QColor("#FF6A3D"))
-        
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        # Draw white trend line
-        painter.setPen(QPen(Qt.GlobalColor.white, 4))
-        painter.drawLine(12, 48, 28, 24)
-        painter.drawLine(28, 24, 52, 40)
-        
-        painter.end()
-        return QIcon(pixmap)
+        from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
+
+        icon = QIcon()
+
+        # Create multiple sizes for Windows DPI scaling
+        for size in [16, 24, 32, 48, 64, 128, 256]:
+            pixmap = QPixmap(size, size)
+            pixmap.fill(QColor("#FF6A3D"))  # Solid orange
+
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+            # Draw white trend line scaled to size
+            scale = size / 64.0
+            pen_width = max(1, int(4 * scale))
+            painter.setPen(QPen(Qt.GlobalColor.white, pen_width))
+
+            # Scaled line coordinates
+            x1, y1 = int(12 * scale), int(48 * scale)
+            x2, y2 = int(28 * scale), int(24 * scale)
+            x3, y3 = int(52 * scale), int(40 * scale)
+            painter.drawLine(x1, y1, x2, y2)
+            painter.drawLine(x2, y2, x3, y3)
+
+            painter.end()
+            icon.addPixmap(pixmap)
+
+        return icon
 
     def _setup_ui(self) -> None:
         """Set up the PyQt6 user interface."""
@@ -211,7 +198,11 @@ class StockAlertApp:
         )
 
     def _on_settings_changed(self) -> None:
-        """Handle settings changes from the UI."""
+        """Handle settings changes from the UI.
+
+        This reloads local config for UI updates and tells the
+        background service to reload its config via IPC.
+        """
         logger.info("Settings changed, reloading configuration")
         self.config_manager.reload()
 
@@ -224,73 +215,75 @@ class StockAlertApp:
             if self.tray_icon:
                 self.tray_icon.update_menu()
 
-        # Update alert settings
-        if self.alert_manager:
-            new_settings = self._load_alert_settings()
-            self.alert_manager.update_settings(new_settings)
+        # Tell the background service to reload its config via IPC
+        if is_service_running():
+            logger.info("Sending RELOAD_SETTINGS command to background service")
+            success = send_reload_config()
+            if success:
+                logger.info("Background service acknowledged config reload")
+            else:
+                logger.warning("Failed to send reload command to service")
 
-        # Restart monitoring with new settings
-        if self._is_monitoring and self.monitor:
-            self.monitor.reload_tickers()
+        # Update service status display
+        self._update_service_status()
 
     def _on_toggle_monitoring(self, enabled: bool) -> None:
-        """Handle monitoring toggle from tray menu."""
+        """Handle monitoring toggle from tray menu.
+
+        NOTE: The GUI doesn't do monitoring. This just starts/stops the service.
+        """
         if enabled:
-            self.start_monitoring()
+            self._start_service()
         else:
-            self.stop_monitoring()
+            self._stop_service()
 
     def _on_quit(self) -> None:
-        """Handle application quit."""
-        logger.info("Application quit requested")
-        self.stop_monitoring()
+        """Handle application quit.
+
+        NOTE: Quitting the GUI does NOT stop the background service.
+        The service continues monitoring independently.
+        """
+        logger.info("GUI quit requested (service continues running)")
+        if self._status_timer:
+            self._status_timer.stop()
         if self.qt_app:
             self.qt_app.quit()
 
-    def start_monitoring(self) -> None:
-        """Start stock price monitoring.
-
-        Will skip if background service is already running to prevent duplicates.
-        """
-        if self._is_monitoring:
+    def _start_service(self) -> None:
+        """Start the background monitoring service."""
+        if is_service_running():
+            logger.info("Service already running")
+            self._update_service_status()
             return
 
-        # Check if background service is already running
-        from stockalert.core.windows_service import get_background_process_status
-        bg_status = get_background_process_status()
-        if bg_status.get("running"):
-            pid = bg_status.get("pid", "?")
-            logger.info(f"Background service already running (PID: {pid}), skipping embedded monitoring")
-            # Update tray to show monitoring is active (via background service)
-            if self.tray_icon:
-                self.tray_icon.set_monitoring_state(True)
+        logger.info("Starting background service from GUI")
+        pid = start_background_process()
+        if pid > 0:
+            logger.info(f"Background service started (PID: {pid})")
+        else:
+            logger.error("Failed to start background service")
+
+        # Update status after a brief delay to let service start
+        QTimer.singleShot(1000, self._update_service_status)
+
+    def _stop_service(self) -> None:
+        """Stop the background monitoring service."""
+        from stockalert.core.ipc import send_stop_service
+
+        if not is_service_running():
+            logger.info("Service not running")
+            self._update_service_status()
             return
 
-        if not self.monitor:
-            self._setup_monitoring()
+        logger.info("Sending STOP command to background service")
+        success = send_stop_service()
+        if success:
+            logger.info("Service acknowledged stop command")
+        else:
+            logger.warning("Failed to send stop command to service")
 
-        logger.info("Starting stock monitoring (embedded mode)")
-        self._is_monitoring = True
-
-        if self.monitor:
-            self.monitor.start()
-
-        if self.tray_icon:
-            self.tray_icon.set_monitoring_state(True)
-
-    def stop_monitoring(self) -> None:
-        """Stop stock price monitoring."""
-        if not self._is_monitoring:
-            return
-
-        logger.info("Stopping stock monitoring")
-        self._is_monitoring = False
-
-        if self.monitor:
-            self.monitor.stop()
-
-        if self.tray_icon:
-            self.tray_icon.set_monitoring_state(False)
+        # Update status after a brief delay
+        QTimer.singleShot(1000, self._update_service_status)
 
     def run(self) -> int:
         """Run the application.
@@ -301,20 +294,19 @@ class StockAlertApp:
         # Create Qt application
         self.qt_app = QApplication(sys.argv)
         # These fix the "Python" text in the taskbar right-click menu
-        self.qt_app.setApplicationName("StockAlert")
-        self.qt_app.setApplicationDisplayName("StockAlert")
+        self.qt_app.setApplicationName("AI StockAlert")
+        self.qt_app.setApplicationDisplayName("AI StockAlert")
         self.qt_app.setApplicationVersion("3.0.0")
         self.qt_app.setOrganizationName("CushLabs")
         self.qt_app.setOrganizationDomain("cushlabs.ai")
         self.qt_app.setQuitOnLastWindowClosed(False)
-        
+
         # Set application-wide icon (affects taskbar)
         # Use programmatic icon to ensure consistent orange branding
         self.qt_app.setWindowIcon(self._create_app_icon())
         logger.info("Set taskbar icon (programmatic orange)")
 
-        # Set up components FIRST (before any dialogs)
-        self._setup_monitoring()
+        # Set up UI (no monitoring setup - that's done by the service)
         self._setup_ui()
 
         # Explicitly brand the main window (Windows sometimes ignores global app icon)
@@ -334,6 +326,14 @@ class StockAlertApp:
                 self.main_window.activateWindow()
             if self.tray_icon:
                 self.tray_icon.show()
+
+        # Start service status polling timer (updates tray icon every 5 seconds)
+        self._status_timer = QTimer()
+        self._status_timer.timeout.connect(self._update_service_status)
+        self._status_timer.start(5000)  # 5 second interval
+
+        # Initial status update
+        self._update_service_status()
 
         # Now check for startup warnings/prompts (after UI is visible)
         # Use timer to show dialogs after window is fully displayed
@@ -359,13 +359,16 @@ class StockAlertApp:
             api_key_valid = self._validate_api_key_on_startup()
 
             if api_key_valid:
-                # Start monitoring now that we know key is valid
-                self.start_monitoring()
+                # Auto-start service if in background mode and not already running
+                self._ensure_service_running()
             else:
-                logger.warning("Monitoring not started - API key not configured")
+                logger.warning("Service not started - API key not configured")
                 # Only prompt if onboarding was already completed (returning user without key)
                 if onboarding_completed:
                     self._prompt_for_api_key()
+
+            # Update status display
+            self._update_service_status()
         except Exception as e:
             logger.exception(f"Error in startup dialogs: {e}")
 

@@ -13,18 +13,15 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QApplication,
-    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFormLayout,
-    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QRadioButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -36,7 +33,7 @@ from stockalert.core.api_key_manager import (
     test_api_key,
 )
 from stockalert.core.paths import get_bundled_assets_dir
-from stockalert.core.service_controller import ServiceController, ServiceMode, ServiceStatus
+from stockalert.core.service_controller import ServiceController, ServiceStatus
 from stockalert.core.tier_limits import get_max_tickers, get_min_check_interval
 from stockalert.i18n.translator import _
 
@@ -71,6 +68,7 @@ class SettingsWidget(QWidget):
         self.translator = translator
         self.on_save = on_save
         self._dirty = False  # Track unsaved changes
+        self._original_values: dict = {}  # Track original values for change detection
 
         # Service controller
         self.service_controller = ServiceController(on_status_changed=self._on_service_status_changed)
@@ -117,12 +115,14 @@ class SettingsWidget(QWidget):
         api_key_layout.addWidget(self.api_key_edit)
 
         self.paste_key_btn = QPushButton(_("settings.paste"))
-        self.paste_key_btn.setObjectName("secondaryButton")
+        self.paste_key_btn.setObjectName("primaryButton")  # Orange - primary action
+        self.paste_key_btn.setFixedWidth(100)
         self.paste_key_btn.clicked.connect(self._on_paste_api_key)
         api_key_layout.addWidget(self.paste_key_btn)
 
         self.test_key_btn = QPushButton(_("settings.test_connection"))
-        self.test_key_btn.setObjectName("actionButton")
+        self.test_key_btn.setObjectName("secondaryButton")  # Gray - secondary action
+        self.test_key_btn.setFixedWidth(100)
         self.test_key_btn.clicked.connect(self._on_test_api_key)
         api_key_layout.addWidget(self.test_key_btn)
 
@@ -169,24 +169,119 @@ class SettingsWidget(QWidget):
         # Check interval with unit selector
         min_interval = get_min_check_interval()
         self.check_interval_label = QLabel(_("settings.check_interval"))
+        self.check_interval_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
 
         interval_container = QWidget()
         interval_layout = QHBoxLayout(interval_container)
-        interval_layout.setContentsMargins(0, 0, 0, 0)
-        interval_layout.setSpacing(8)
+        interval_layout.setContentsMargins(0, 8, 0, 8)
+        interval_layout.setSpacing(16)
 
+        # Spinbox with hidden buttons - we'll add our own
         self.check_interval_spin = QSpinBox()
-        self.check_interval_spin.setFixedWidth(80)
+        self.check_interval_spin.setMinimumWidth(80)
+        self.check_interval_spin.setMinimumHeight(40)
+        self.check_interval_spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
+        self.check_interval_spin.setStyleSheet("""
+            QSpinBox {
+                padding: 8px 12px;
+                font-size: 14px;
+                background-color: #2d2d2d;
+                color: white;
+                border: 1px solid #555;
+                border-radius: 4px;
+            }
+        """)
         interval_layout.addWidget(self.check_interval_spin)
+
+        # Custom up/down buttons with chevrons
+        arrow_container = QWidget()
+        arrow_layout = QVBoxLayout(arrow_container)
+        arrow_layout.setContentsMargins(0, 0, 0, 0)
+        arrow_layout.setSpacing(2)
+
+        self.interval_up_btn = QPushButton("+")
+        self.interval_up_btn.setFixedSize(28, 19)
+        self.interval_up_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3d3d3d;
+                color: white;
+                border: 1px solid #555;
+                border-radius: 3px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #5d5d5d; }
+            QPushButton:pressed { background-color: #FF6A3D; }
+        """)
+        self.interval_up_btn.clicked.connect(lambda: self.check_interval_spin.stepUp())
+        arrow_layout.addWidget(self.interval_up_btn)
+
+        self.interval_down_btn = QPushButton("-")
+        self.interval_down_btn.setFixedSize(28, 19)
+        self.interval_down_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3d3d3d;
+                color: white;
+                border: 1px solid #555;
+                border-radius: 3px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #5d5d5d; }
+            QPushButton:pressed { background-color: #FF6A3D; }
+        """)
+        self.interval_down_btn.clicked.connect(lambda: self.check_interval_spin.stepDown())
+        arrow_layout.addWidget(self.interval_down_btn)
+
+        interval_layout.addWidget(arrow_container)
 
         # Unit selector (seconds, minutes, hours)
         self.interval_unit_combo = QComboBox()
         self.interval_unit_combo.addItem(_("settings.unit_seconds"), "seconds")
         self.interval_unit_combo.addItem(_("settings.unit_minutes"), "minutes")
         self.interval_unit_combo.addItem(_("settings.unit_hours"), "hours")
-        self.interval_unit_combo.setFixedWidth(100)
+        self.interval_unit_combo.setMinimumWidth(110)
+        self.interval_unit_combo.setMinimumHeight(40)
+        self.interval_unit_combo.setStyleSheet("""
+            QComboBox {
+                padding: 8px 12px;
+                font-size: 14px;
+                background-color: #2d2d2d;
+                color: white;
+                border: 1px solid #555;
+                border-radius: 4px;
+            }
+            QComboBox::drop-down {
+                width: 0px;
+                border: none;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #2d2d2d;
+                color: white;
+                selection-background-color: #FF6A3D;
+                border: 1px solid #555;
+            }
+        """)
         self.interval_unit_combo.currentIndexChanged.connect(self._on_interval_unit_changed)
         interval_layout.addWidget(self.interval_unit_combo)
+
+        # Dropdown button with chevron
+        self.combo_dropdown_btn = QPushButton("v")
+        self.combo_dropdown_btn.setFixedSize(28, 40)
+        self.combo_dropdown_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #3d3d3d;
+                color: white;
+                border: 1px solid #555;
+                border-radius: 3px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #5d5d5d; }
+            QPushButton:pressed { background-color: #FF6A3D; }
+        """)
+        self.combo_dropdown_btn.clicked.connect(lambda: self.interval_unit_combo.showPopup())
+        interval_layout.addWidget(self.combo_dropdown_btn)
 
         interval_layout.addStretch()
 
@@ -277,19 +372,18 @@ class SettingsWidget(QWidget):
 
         layout.addWidget(self.alerts_group)
 
-        # Service Control group
+        # Background Service group (simplified - service always runs automatically)
         self.service_group = QGroupBox(_("settings.service_title"))
-        self.service_group.setMinimumHeight(380)
         service_main_layout = QVBoxLayout(self.service_group)
         service_main_layout.setSpacing(16)
-        service_main_layout.setContentsMargins(24, 40, 24, 24)
+        service_main_layout.setContentsMargins(24, 24, 24, 24)
 
         # Status row with indicator
         status_row = QHBoxLayout()
         self.service_status_label = QLabel(_("settings.service_status"))
         status_row.addWidget(self.service_status_label)
 
-        self.service_status_indicator = QLabel("●")
+        self.service_status_indicator = QLabel("")
         self.service_status_indicator.setStyleSheet("font-size: 16px; color: gray;")
         status_row.addWidget(self.service_status_indicator)
 
@@ -299,91 +393,11 @@ class SettingsWidget(QWidget):
         status_row.addStretch()
         service_main_layout.addLayout(status_row)
 
-        # Mode selection as card-style options
-        self.service_mode_label = QLabel(_("settings.service_mode"))
-        service_main_layout.addWidget(self.service_mode_label)
-
-        mode_cards_layout = QHBoxLayout()
-        mode_cards_layout.setSpacing(24)  # Space between cards
-
-        self.service_mode_group = QButtonGroup(self)
-
-        # Card 1: Only While App Open
-        card1 = QFrame()
-        card1.setObjectName("modeCard")
-        card1.setFrameShape(QFrame.Shape.StyledPanel)
-        card1_layout = QVBoxLayout(card1)
-        card1_layout.setSpacing(10)
-        card1_layout.setContentsMargins(16, 16, 16, 16)
-
-        self.mode_embedded_radio = QRadioButton(_("settings.mode_embedded"))
-        self.mode_embedded_radio.setObjectName("modeRadio")
-        self.service_mode_group.addButton(self.mode_embedded_radio, 0)
-        card1_layout.addWidget(self.mode_embedded_radio)
-
-        self.embedded_desc = QLabel(_("settings.mode_embedded_help"))
-        self.embedded_desc.setObjectName("helpLabel")
-        self.embedded_desc.setWordWrap(True)
-        card1_layout.addWidget(self.embedded_desc)
-
-        # Spacer to match card2 height
-        spacer1 = QLabel("")
-        spacer1.setFixedHeight(20)
-        card1_layout.addWidget(spacer1)
-
-        mode_cards_layout.addWidget(card1, 1)
-
-        # Card 2: 24/7 Background
-        card2 = QFrame()
-        card2.setObjectName("modeCard")
-        card2.setFrameShape(QFrame.Shape.StyledPanel)
-        card2_layout = QVBoxLayout(card2)
-        card2_layout.setSpacing(10)
-        card2_layout.setContentsMargins(16, 16, 16, 16)
-
-        self.mode_background_radio = QRadioButton(_("settings.mode_background"))
-        self.mode_background_radio.setObjectName("modeRadio")
-        self.service_mode_group.addButton(self.mode_background_radio, 1)
-        card2_layout.addWidget(self.mode_background_radio)
-
-        self.background_desc = QLabel(_("settings.mode_background_help"))
-        self.background_desc.setObjectName("helpLabel")
-        self.background_desc.setWordWrap(True)
-        card2_layout.addWidget(self.background_desc)
-
-        # Recommended badge
-        self.recommended_label = QLabel("✓ Recommended")
-        self.recommended_label.setStyleSheet("color: #FF6A3D; font-size: 11px; font-weight: bold;")
-        card2_layout.addWidget(self.recommended_label)
-
-        mode_cards_layout.addWidget(card2, 1)
-        service_main_layout.addLayout(mode_cards_layout)
-
-        # Help text
-        self.service_mode_help = QLabel(_("settings.service_mode_help"))
-        self.service_mode_help.setObjectName("helpLabel")
-        service_main_layout.addWidget(self.service_mode_help)
-
-        # Service control buttons
-        btn_container = QWidget()
-        btn_layout = QHBoxLayout(btn_container)
-        btn_layout.setContentsMargins(0, 8, 0, 0)
-        btn_layout.setSpacing(12)
-
-        self.service_start_btn = QPushButton(_("settings.service_start"))
-        self.service_start_btn.setObjectName("actionButton")
-        self.service_start_btn.setToolTip(_("settings.service_start_help"))
-        self.service_start_btn.clicked.connect(self._on_service_start)
-        btn_layout.addWidget(self.service_start_btn)
-
-        self.service_stop_btn = QPushButton(_("settings.service_stop"))
-        self.service_stop_btn.setObjectName("actionButton")
-        self.service_stop_btn.setToolTip(_("settings.service_stop_help"))
-        self.service_stop_btn.clicked.connect(self._on_service_stop)
-        btn_layout.addWidget(self.service_stop_btn)
-
-        btn_layout.addStretch()
-        service_main_layout.addWidget(btn_container)
+        # Help text explaining automatic behavior
+        self.service_help = QLabel(_("settings.service_auto_help"))
+        self.service_help.setObjectName("helpLabel")
+        self.service_help.setWordWrap(True)
+        service_main_layout.addWidget(self.service_help)
 
         # Autostart checkbox
         self.autostart_check = QCheckBox(_("settings.autostart"))
@@ -391,6 +405,7 @@ class SettingsWidget(QWidget):
         self.autostart_check.stateChanged.connect(self._on_autostart_changed)
         service_main_layout.addWidget(self.autostart_check)
 
+        service_main_layout.addStretch()
         layout.addWidget(self.service_group)
 
         # Status label
@@ -512,20 +527,26 @@ class SettingsWidget(QWidget):
         self.windows_alerts_check.stateChanged.connect(self._mark_dirty)
         self.windows_audio_check.stateChanged.connect(self._mark_dirty)
         self.whatsapp_alerts_check.stateChanged.connect(self._mark_dirty)
-        self.mode_embedded_radio.toggled.connect(self._mark_dirty)
-        self.mode_background_radio.toggled.connect(self._mark_dirty)
 
     def _load_settings(self) -> None:
         """Load settings from configuration."""
         settings = self.config_manager.settings
+        alerts = settings.get("alerts", {})
+
+        # Store original values for change detection
+        self._original_values = {
+            "check_interval": settings.get("check_interval", 600),
+            "windows_enabled": alerts.get("windows_enabled", True),
+            "windows_audio": alerts.get("windows_audio", True),
+            "whatsapp_enabled": alerts.get("whatsapp_enabled", False),
+        }
 
         # Load API key (masked)
         api_key = get_api_key()
         if api_key:
             self.api_key_edit.setText(api_key)
-            self.api_status_label.setText("✓ " + _("settings.api_key_configured"))
+            self.api_status_label.setText("OK - " + _("settings.api_key_configured"))
             self.api_status_label.setStyleSheet("color: #00AA00;")
-            # Keep license and tier limits blank - only show after test connection
             self.license_label.setText("")
         else:
             self.api_status_label.setText(_("settings.api_key_not_set"))
@@ -535,13 +556,12 @@ class SettingsWidget(QWidget):
         # Load check interval (in seconds, enforce minimum)
         min_interval = get_min_check_interval()
         interval_seconds = settings.get("check_interval", min_interval)
-        interval_seconds = max(interval_seconds, min_interval)  # Enforce minimum
+        interval_seconds = max(interval_seconds, min_interval)
         self._set_interval_from_seconds(interval_seconds)
 
         self.cooldown_spin.setValue(settings.get("cooldown", 300))
 
         # Load alert settings
-        alerts = settings.get("alerts", {})
         self.windows_alerts_check.setChecked(alerts.get("windows_enabled", True))
         self.windows_audio_check.setChecked(alerts.get("windows_audio", True))
         self.windows_audio_check.setEnabled(alerts.get("windows_enabled", True))
@@ -553,21 +573,10 @@ class SettingsWidget(QWidget):
         self.test_whatsapp_btn.setEnabled(whatsapp_enabled)
 
         if not has_phone:
-            self.whatsapp_alerts_check.setEnabled(True)  # Allow clicking to show message
+            self.whatsapp_alerts_check.setEnabled(True)
             self.whatsapp_status_label.setText("")
         else:
             self.whatsapp_status_label.setText("")
-
-        # SMS, Email hidden for now
-        # self.sms_alerts_check.setChecked(alerts.get("sms_enabled", False))
-        # self.email_alerts_check.setChecked(alerts.get("email_enabled", False))
-
-        # Set service mode
-        service_mode = settings.get("service_mode", "embedded")
-        if service_mode == "background":
-            self.mode_background_radio.setChecked(True)
-        else:
-            self.mode_embedded_radio.setChecked(True)
 
         # Load autostart state (block signals to prevent triggering change handler)
         from stockalert.core.windows_service import is_autostart_enabled
@@ -578,44 +587,78 @@ class SettingsWidget(QWidget):
     def _on_save_clicked(self) -> None:
         """Handle save button click."""
         try:
+            changes = []  # Track what changed
+
+            # Compare against original values loaded at startup (not current config)
+            orig = self._original_values
+
             # Save API key through BOTH systems to ensure it persists
             api_key = self.api_key_edit.text().strip()
-            if api_key:
-                # Save to secure storage / config file
+            old_api_key = get_api_key() or ""
+            if api_key and api_key != old_api_key:
                 set_api_key(api_key)
-                # Also set in config_manager so it's not lost when config is saved
                 self.config_manager.set("api_key", api_key, save=False)
+                changes.append("API Key: Updated")
 
             # Get check interval in seconds (converted from displayed unit)
             check_interval = self._get_interval_seconds()
+            old_interval = orig.get("check_interval", 600)
+            if check_interval != old_interval:
+                changes.append(f"Check Interval: {self._format_interval(old_interval)} -> {self._format_interval(check_interval)}")
 
             # Use default cooldown (hidden from UI)
             cooldown = self.cooldown_spin.value()
 
             # Get alert settings
             windows_enabled = self.windows_alerts_check.isChecked()
+            old_windows = orig.get("windows_enabled", True)
+            if windows_enabled != old_windows:
+                changes.append(f"Windows Notifications: {'Enabled' if windows_enabled else 'Disabled'}")
+
             windows_audio = self.windows_audio_check.isChecked()
+            old_audio = orig.get("windows_audio", True)
+            if windows_audio != old_audio:
+                changes.append(f"Notification Sound: {'Enabled' if windows_audio else 'Disabled'}")
+
             whatsapp_enabled = self.whatsapp_alerts_check.isChecked()
-            # email_enabled = self.email_alerts_check.isChecked()
+            old_whatsapp = orig.get("whatsapp_enabled", False)
+            if whatsapp_enabled != old_whatsapp:
+                changes.append(f"WhatsApp Alerts: {'Enabled' if whatsapp_enabled else 'Disabled'}")
 
             # Update configuration
             self.config_manager.set("settings.check_interval", check_interval, save=False)
             self.config_manager.set("settings.cooldown", cooldown, save=False)
             self.config_manager.set("settings.alerts.windows_enabled", windows_enabled, save=False)
             self.config_manager.set("settings.alerts.windows_audio", windows_audio, save=False)
-            self.config_manager.set("settings.alerts.whatsapp_enabled", whatsapp_enabled, save=False)
-            # SMS, Email hidden for now
-            # self.config_manager.set("settings.alerts.sms_enabled", sms_enabled, save=False)
-            # self.config_manager.set("settings.alerts.email_enabled", email_enabled, save=False)
+            self.config_manager.set("settings.alerts.whatsapp_enabled", whatsapp_enabled, save=True)
 
-            # Save service mode
-            service_mode = "background" if self.mode_background_radio.isChecked() else "embedded"
-            self.config_manager.set("settings.service_mode", service_mode, save=True)
-
-            # Update status
+            # Update status label
             self.status_label.setText(_("settings.saved"))
             self.status_label.setStyleSheet("color: green;")
-            self._dirty = False  # Reset dirty flag after save
+            self._dirty = False
+
+            # Update original values to new saved values (for future change detection)
+            self._original_values = {
+                "check_interval": check_interval,
+                "windows_enabled": windows_enabled,
+                "windows_audio": windows_audio,
+                "whatsapp_enabled": whatsapp_enabled,
+            }
+
+            # Show dialog with changes
+            if changes:
+                changes_text = "\n".join(f"  - {c}" for c in changes)
+                QMessageBox.information(
+                    self,
+                    "AI StockAlert - Settings Saved",
+                    f"Settings saved successfully!\n\nChanges:\n{changes_text}",
+                )
+            else:
+                QMessageBox.information(
+                    self,
+                    "AI StockAlert - Settings Saved",
+                    "Settings saved successfully!\n\nNo changes detected.",
+                )
 
             # Trigger callback
             if self.on_save:
@@ -630,6 +673,17 @@ class SettingsWidget(QWidget):
                 _("errors.title"),
                 str(e),
             )
+
+    def _format_interval(self, seconds: int) -> str:
+        """Format interval in human-readable form."""
+        if seconds >= 3600 and seconds % 3600 == 0:
+            hours = seconds // 3600
+            return f"{hours} hour{'s' if hours > 1 else ''}"
+        elif seconds >= 60 and seconds % 60 == 0:
+            minutes = seconds // 60
+            return f"{minutes} minute{'s' if minutes > 1 else ''}"
+        else:
+            return f"{seconds} seconds"
 
     def retranslate_ui(self) -> None:
         """Update UI text after language change."""
@@ -668,18 +722,7 @@ class SettingsWidget(QWidget):
 
         # Service settings
         self.service_status_label.setText(_("settings.service_status"))
-        self.service_mode_label.setText(_("settings.service_mode"))
-        self.service_mode_help.setText(_("settings.service_mode_help"))
-        self.mode_embedded_radio.setText(_("settings.mode_embedded"))
-        self.mode_embedded_radio.setToolTip(_("settings.mode_embedded_help"))
-        self.embedded_desc.setText(_("settings.mode_embedded_help"))
-        self.mode_background_radio.setText(_("settings.mode_background"))
-        self.mode_background_radio.setToolTip(_("settings.mode_background_help"))
-        self.background_desc.setText(_("settings.mode_background_help"))
-        self.service_start_btn.setText(_("settings.service_start"))
-        self.service_start_btn.setToolTip(_("settings.service_start_help"))
-        self.service_stop_btn.setText(_("settings.service_stop"))
-        self.service_stop_btn.setToolTip(_("settings.service_stop_help"))
+        self.service_help.setText(_("settings.service_auto_help"))
         self.autostart_check.setText(_("settings.autostart"))
         self.autostart_check.setToolTip(_("settings.autostart_help"))
 
@@ -694,85 +737,22 @@ class SettingsWidget(QWidget):
 
         self.service_status_value.setText(status_text)
 
-        # Update status indicator color, text color, and button states
+        # Update status indicator color and text color
         if state.status == ServiceStatus.RUNNING:
             # Green indicator and text for running
+            self.service_status_indicator.setText("")
             self.service_status_indicator.setStyleSheet("font-size: 16px; color: #00CC00;")
             self.service_status_value.setStyleSheet("color: #00CC00; font-weight: bold;")
-            self.service_start_btn.setEnabled(False)
-            self.service_stop_btn.setEnabled(True)
-            # If service is running, ensure "24/7 Background" is selected
-            if not self.mode_background_radio.isChecked():
-                self.mode_background_radio.blockSignals(True)
-                self.mode_background_radio.setChecked(True)
-                self.mode_background_radio.blockSignals(False)
         elif state.status == ServiceStatus.STOPPED:
             # Red indicator for stopped
+            self.service_status_indicator.setText("")
             self.service_status_indicator.setStyleSheet("font-size: 16px; color: #CC0000;")
             self.service_status_value.setStyleSheet("color: gray;")
-            self.service_start_btn.setEnabled(True)
-            self.service_stop_btn.setEnabled(False)
         else:
             # Orange indicator for transitioning/unknown
+            self.service_status_indicator.setText("")
             self.service_status_indicator.setStyleSheet("font-size: 16px; color: #FF9900;")
             self.service_status_value.setStyleSheet("color: orange;")
-            self.service_start_btn.setEnabled(False)
-            self.service_stop_btn.setEnabled(False)
-
-    def _on_service_start(self) -> None:
-        """Handle service start button click."""
-        # Starting the service always means 24/7 Background mode
-        # Auto-select the radio button if not already selected
-        if not self.mode_background_radio.isChecked():
-            self.mode_background_radio.setChecked(True)
-            # Also save this preference
-            self.config_manager.set("settings.service_mode", "background", save=True)
-
-        mode = ServiceMode.BACKGROUND_PROCESS
-
-        self.service_start_btn.setEnabled(False)
-        self.status_label.setText(_("settings.service_starting"))
-        self.status_label.setStyleSheet("color: blue;")
-
-        # Force UI update to show status change
-        QApplication.processEvents()
-
-        success, message = self.service_controller.start(mode)
-
-        if success:
-            self.status_label.setText(_("settings.service_started"))
-            self.status_label.setStyleSheet("color: green;")
-            # Mark settings as dirty so user is prompted to save on close
-            self._mark_dirty()
-            # Wait for service to fully initialize before checking status
-            QTimer.singleShot(1500, self._update_service_status)
-        else:
-            self.status_label.setText(message)
-            self.status_label.setStyleSheet("color: red;")
-            self._update_service_status()
-
-    def _on_service_stop(self) -> None:
-        """Handle service stop button click."""
-        self.service_stop_btn.setEnabled(False)
-        self.status_label.setText(_("settings.service_stopping"))
-        self.status_label.setStyleSheet("color: blue;")
-
-        # Force UI update
-        QApplication.processEvents()
-
-        success, message = self.service_controller.stop()
-
-        if success:
-            self.status_label.setText(_("settings.service_stopped"))
-            self.status_label.setStyleSheet("color: green;")
-            # Mark settings as dirty so user is prompted to save on close
-            self._mark_dirty()
-            # Wait for service to fully stop before checking status
-            QTimer.singleShot(1000, self._update_service_status)
-        else:
-            self.status_label.setText(message)
-            self.status_label.setStyleSheet("color: red;")
-            self._update_service_status()
 
     def _on_autostart_changed(self, state: int) -> None:
         """Handle autostart checkbox change."""
@@ -855,33 +835,53 @@ class SettingsWidget(QWidget):
 
     def _on_test_windows(self) -> None:
         """Test Windows notification using Windows-Toasts library."""
+        # Show info dialog FIRST - notification will be sent after user clicks OK
+        result = QMessageBox.information(
+            self,
+            "AI StockAlert - Windows Test",
+            "A test notification will be sent after you click OK.\n\n"
+            "Check your Windows notification area (bottom-right corner).\n\n"
+            "If you don't see it, check that Focus Assist / Do Not Disturb is off.",
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+        )
+
+        if result != QMessageBox.StandardButton.Ok:
+            return
+
         self.test_windows_btn.setEnabled(False)
         self.status_label.setText(_("settings.testing_windows"))
         self.status_label.setStyleSheet("color: #888888;")
         QApplication.processEvents()
 
+        # Small delay so user can see the notification area
+        QTimer.singleShot(500, self._send_test_windows_notification)
+
+    def _send_test_windows_notification(self) -> None:
+        """Actually send the Windows test notification."""
         try:
             from windows_toasts import Toast, WindowsToaster
 
-            toaster = WindowsToaster("StockAlert")
+            toaster = WindowsToaster("AI StockAlert")
             toast = Toast()
             toast.text_fields = [
                 "StockAlert Test",
                 "This is a test notification. If you see this, Windows notifications are working!",
             ]
+
+            # Check if audio is enabled
+            play_audio = self.windows_audio_check.isChecked()
+            if not play_audio:
+                from windows_toasts import ToastAudio
+                toast.audio = ToastAudio(silent=True)
+
             toaster.show_toast(toast)
 
-            self.status_label.setText("✓ " + _("settings.test_windows_success"))
+            self.status_label.setText("OK - " + _("settings.test_windows_success"))
             self.status_label.setStyleSheet("color: #00AA00; font-weight: bold;")
-            QMessageBox.information(
-                self,
-                "Windows Test",
-                "Test notification sent!\n\nCheck your Windows notification area (bottom-right corner).\n\nIf you don't see it, check that Focus Assist / Do Not Disturb is off.",
-            )
 
         except Exception as e:
             logger.exception("Failed to test Windows notification")
-            self.status_label.setText(f"✗ {e}")
+            self.status_label.setText(f"Error: {e}")
             self.status_label.setStyleSheet("color: #FF0000; font-weight: bold;")
             QMessageBox.critical(self, "Windows Test Error", str(e))
 
