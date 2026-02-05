@@ -92,11 +92,11 @@ class MainWindow(QMainWindow):
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
-        self.setWindowTitle(_("app.name"))
+        self.setWindowTitle(_("app.description"))
 
-        # Always use programmatic orange branded icon for consistency
+        # Use branded .ico file for window icon (shows on taskbar)
         self.setWindowIcon(self._create_app_icon())
-        logger.info("Set window icon (programmatic orange)")
+        logger.info("Set window icon from .ico file")
 
         # Main central widget
         central_widget = QWidget()
@@ -2105,35 +2105,39 @@ QDialog {{
             self.settings_widget.retranslate_ui()
 
     def _create_app_icon(self) -> QIcon:
-        """Create a branded app icon programmatically with multiple sizes."""
+        """Load the branded app icon from the .ico file.
+
+        Falls back to a programmatic orange icon if the .ico file is missing.
+        """
+        ico_path = get_bundled_assets_dir() / "stock_alert.ico"
+        if ico_path.exists():
+            icon = QIcon(str(ico_path))
+            if not icon.isNull():
+                logger.info(f"Loaded app icon from {ico_path}")
+                return icon
+            logger.warning(f"Icon file exists but failed to load: {ico_path}")
+
+        # Fallback: programmatic orange icon
         from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
 
+        logger.info("Using fallback programmatic icon")
         icon = QIcon()
-
-        # Create multiple sizes for Windows DPI scaling
         for size in [16, 24, 32, 48, 64, 128, 256]:
             pixmap = QPixmap(size, size)
-            pixmap.fill(QColor("#FF6A3D"))  # Solid orange
-
+            pixmap.fill(QColor("#FF6A3D"))
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-            # Draw white trend line scaled to size
             scale = size / 64.0
             pen_width = max(1, int(4 * scale))
             painter.setPen(QPen(Qt.GlobalColor.white, pen_width))
-
-            # Scaled line coordinates
             x1, y1 = int(12 * scale), int(48 * scale)
             x2, y2 = int(28 * scale), int(24 * scale)
             x3, y3 = int(52 * scale), int(40 * scale)
             painter.drawLine(x1, y1, x2, y2)
             painter.drawLine(x2, y2, x3, y3)
-
             painter.end()
             icon.addPixmap(pixmap)
-
         return icon
 
     def _toggle_theme(self) -> None:
@@ -2698,7 +2702,14 @@ QDialog {{
 
     def retranslate_ui(self) -> None:
         """Update UI text after language change."""
-        self.setWindowTitle(_("app.name"))
+        self.setWindowTitle(_("app.description"))
+
+        # Update Qt application display name so taskbar right-click shows
+        # the translated description instead of hardcoded English
+        app = QApplication.instance()
+        if app:
+            app.setApplicationName(_("app.name"))
+            app.setApplicationDisplayName(_("app.description"))
 
         # Update tab labels - Profile, Settings, Tickers, News, Help
         self.tabs.setTabText(0, _("tabs.profile"))

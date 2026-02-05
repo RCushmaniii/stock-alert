@@ -148,35 +148,39 @@ class StockAlertApp:
             logger.debug(f"Error updating service status: {e}")
 
     def _create_app_icon(self) -> QIcon:
-        """Create a branded app icon programmatically with multiple sizes."""
+        """Load the branded app icon from the .ico file.
+
+        Falls back to a programmatic orange icon if the .ico file is missing.
+        """
         from PyQt6.QtCore import Qt
         from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
 
-        icon = QIcon()
+        ico_path = get_bundled_assets_dir() / "stock_alert.ico"
+        if ico_path.exists():
+            icon = QIcon(str(ico_path))
+            if not icon.isNull():
+                logger.info(f"Loaded app icon from {ico_path}")
+                return icon
+            logger.warning(f"Icon file exists but failed to load: {ico_path}")
 
-        # Create multiple sizes for Windows DPI scaling
+        # Fallback: programmatic orange icon
+        logger.info("Using fallback programmatic icon")
+        icon = QIcon()
         for size in [16, 24, 32, 48, 64, 128, 256]:
             pixmap = QPixmap(size, size)
-            pixmap.fill(QColor("#FF6A3D"))  # Solid orange
-
+            pixmap.fill(QColor("#FF6A3D"))
             painter = QPainter(pixmap)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-            # Draw white trend line scaled to size
             scale = size / 64.0
             pen_width = max(1, int(4 * scale))
             painter.setPen(QPen(Qt.GlobalColor.white, pen_width))
-
-            # Scaled line coordinates
             x1, y1 = int(12 * scale), int(48 * scale)
             x2, y2 = int(28 * scale), int(24 * scale)
             x3, y3 = int(52 * scale), int(40 * scale)
             painter.drawLine(x1, y1, x2, y2)
             painter.drawLine(x2, y2, x3, y3)
-
             painter.end()
             icon.addPixmap(pixmap)
-
         return icon
 
     def _setup_ui(self) -> None:
@@ -300,26 +304,24 @@ class StockAlertApp:
         # self.qt_app.setStyle(self._app_style)
         self.qt_app.setStyle("Fusion")
 
+        # Import translator for localized app properties
+        from stockalert.i18n.translator import _
+
         # These fix the "Python" text in the taskbar right-click menu
-        self.qt_app.setApplicationName("AI StockAlert")
-        self.qt_app.setApplicationDisplayName("AI StockAlert")
-        self.qt_app.setApplicationVersion("3.0.0")
+        # Use translated strings so taskbar right-click shows correct language
+        self.qt_app.setApplicationName(_("app.name"))
+        self.qt_app.setApplicationDisplayName(_("app.description"))
+        self.qt_app.setApplicationVersion("4.0.0")
         self.qt_app.setOrganizationName("CushLabs")
         self.qt_app.setOrganizationDomain("cushlabs.ai")
         self.qt_app.setQuitOnLastWindowClosed(False)
 
-        # Set application-wide icon (affects taskbar)
-        # Use programmatic icon to ensure consistent orange branding
+        # Set application-wide icon from .ico file (affects taskbar)
         self.qt_app.setWindowIcon(self._create_app_icon())
-        logger.info("Set taskbar icon (programmatic orange)")
+        logger.info("Set taskbar icon from .ico file")
 
         # Set up UI (no monitoring setup - that's done by the service)
         self._setup_ui()
-
-        # Explicitly brand the main window (Windows sometimes ignores global app icon)
-        if self.main_window:
-            self.main_window.setWindowIcon(self._create_app_icon())
-            logger.info("Set main window icon explicitly")
 
         # Show window or minimize to tray
         if self.start_minimized:

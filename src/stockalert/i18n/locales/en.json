@@ -1,15 +1,15 @@
 {
   "app": {
-    "name": "StockAlert",
+    "name": "AI StockAlert",
     "version": "4.0.0",
-    "description": "Stock price monitoring with Windows notifications"
+    "description": "AI StockAlert: Stock price monitoring with Windows notifications"
   },
   "languages": {
     "en": "English",
     "es": "Español"
   },
   "header": {
-    "title": "StockAlert"
+    "title": "AI StockAlert"
   },
   "footer": {
     "copyright": "© 2026 CushLabs.ai. All Rights Reserved.",

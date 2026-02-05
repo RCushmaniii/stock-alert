@@ -1,15 +1,15 @@
 {
   "app": {
-    "name": "StockAlert",
+    "name": "AI StockAlert",
     "version": "4.0.0",
-    "description": "Monitoreo de precios de acciones en tiempo real con alertas inteligentes"
+    "description": "AI StockAlert: Monitoreo de precios de acciones en tiempo real con alertas inteligentes"
   },
   "languages": {
     "en": "English",
     "es": "Español"
   },
   "header": {
-    "title": "StockAlert"
+    "title": "AI StockAlert"
   },
   "footer": {
     "copyright": "© 2026 CushLabs.ai. Todos los Derechos Reservados.",
