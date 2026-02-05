@@ -247,7 +247,7 @@
   "about": {
     "title": "About StockAlert",
     "version": "Version {version}",
-    "description": "Commercial-grade stock price monitoring for Windows",
+    "description": "Real-time stock price monitoring with smart alerts",
     "author": "Created by Robert Cushman",
     "company": "RC Software",
     "copyright": "© 2026 CushLabs.ai. All Rights Reserved.",

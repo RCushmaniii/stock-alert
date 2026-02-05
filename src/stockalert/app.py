@@ -293,6 +293,13 @@ class StockAlertApp:
         """
         # Create Qt application
         self.qt_app = QApplication(sys.argv)
+
+        # Apply custom style for properly sized spinbox/combobox arrows
+        # from stockalert.ui.styles.proxy_style import StockAlertStyle
+        # self._app_style = StockAlertStyle("Fusion")
+        # self.qt_app.setStyle(self._app_style)
+        self.qt_app.setStyle("Fusion")
+
         # These fix the "Python" text in the taskbar right-click menu
         self.qt_app.setApplicationName("AI StockAlert")
         self.qt_app.setApplicationDisplayName("AI StockAlert")

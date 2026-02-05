@@ -26,17 +26,28 @@ if sys.platform == "win32":
 from cx_Freeze import Executable, setup
 
 # Application metadata
-APP_NAME = "StockAlert"
-APP_VERSION = "3.0.0"
-APP_DESCRIPTION = "Commercial-grade stock price monitoring with Windows notifications"
+APP_NAME = "AI StockAlert"
+APP_VERSION = "4.0.0"
+APP_DESCRIPTION = "AI StockAlert"
 APP_AUTHOR = "Robert Cushman"
 APP_COMPANY = "CUSHLABS.AI"
-APP_COPYRIGHT = "Copyright 2024-2025 CUSHLABS.AI"
+APP_COPYRIGHT = "Copyright 2024-2026 CUSHLABS.AI"
 
 # Find package data files
 src_dir = Path("src/stockalert")
 locale_files = list((src_dir / "i18n/locales").glob("*.json"))
 style_files = list((src_dir / "ui/styles").glob("*.qss"))
+asset_files = list((src_dir / "ui/assets").glob("*.svg"))
+
+# Find pywin32 DLLs that need to be bundled
+venv_site_packages = Path("venv/Lib/site-packages")
+pywin32_dlls = []
+pywin32_system32 = venv_site_packages / "pywin32_system32"
+if pywin32_system32.exists():
+    for dll in pywin32_system32.glob("*.dll"):
+        pywin32_dlls.append((str(dll), dll.name))
+        # Also put in lib/ where extensions (win32api.pyd) live
+        pywin32_dlls.append((str(dll), f"lib/{dll.name}"))
 
 # Build include_files list
 include_files = [
@@ -55,6 +66,9 @@ include_files = [
     ("install_startup.ps1", "install_startup.ps1"),
 ]
 
+# Add pywin32 DLLs
+include_files.extend(pywin32_dlls)
+
 # Add locale files
 for locale_file in locale_files:
     include_files.append(
@@ -65,6 +79,12 @@ for locale_file in locale_files:
 for style_file in style_files:
     include_files.append(
         (str(style_file), f"lib/stockalert/ui/styles/{style_file.name}")
+    )
+
+# Add asset files
+for asset_file in asset_files:
+    include_files.append(
+        (str(asset_file), f"lib/stockalert/ui/assets/{asset_file.name}")
     )
 
 # Dependencies to include
@@ -89,6 +109,11 @@ build_exe_options = {
         "phonenumbers",
         # WinRT for Windows notifications (include all subpackages)
         "winrt",
+        # pywin32 for IPC (Named Pipes, Mutex)
+        "win32api",
+        "win32event",
+        "win32file",
+        "win32pipe",
     ],
     "includes": [
         # Explicitly include modules that might not be auto-detected
@@ -102,9 +127,12 @@ build_exe_options = {
         "winrt.windows.foundation.collections",
         "winrt.windows.data.xml.dom",
         "winrt.windows.ui.notifications",
-        # Win32 modules for keyring (Windows Credential Manager)
+        # Win32 modules for keyring and IPC
         "win32timezone",
         "win32api",
+        "win32event",
+        "win32file",
+        "win32pipe",
         "win32cred",
         "win32ctypes",
         "win32ctypes.core",

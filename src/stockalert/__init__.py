@@ -1,5 +1,5 @@
 """
-StockAlert - Commercial-grade stock price monitoring for Windows.
+AI StockAlert - Real-time stock price monitoring with smart alerts.
 
 A bilingual (English/Spanish) desktop application that monitors stock prices
 and sends Windows toast notifications when configurable thresholds are breached.

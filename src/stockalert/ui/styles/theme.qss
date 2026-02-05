@@ -78,32 +78,59 @@ QLineEdit:disabled, QSpinBox:disabled, QDoubleSpinBox:disabled {
 }
 
 /* Spin Box Buttons */
+QSpinBox, QDoubleSpinBox {
+    padding-right: 28px; /* Leave space for buttons */
+}
+
 QSpinBox::up-button, QDoubleSpinBox::up-button {
     background-color: #3d4f6f;
-    border-radius: 2px;
-    width: 16px;
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 24px;
+    height: 14px;
+    border-left: 1px solid #1e2433;
+    border-top-right-radius: 4px;
 }
 
 QSpinBox::down-button, QDoubleSpinBox::down-button {
     background-color: #3d4f6f;
-    border-radius: 2px;
-    width: 16px;
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 24px;
+    height: 14px;
+    border-left: 1px solid #1e2433;
+    border-bottom-right-radius: 4px;
 }
 
 QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
 QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
-    background-color: #4d6a8f;
+    background-color: #4d7cac;
+}
+
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+    image: url(:/assets/chevron-up.svg);
+    width: 12px;
+    height: 8px;
+}
+
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+    image: url(:/assets/chevron-down.svg);
+    width: 12px;
+    height: 8px;
 }
 
 /* Combo Box */
 QComboBox::drop-down {
-    border: none;
-    width: 24px;
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 28px;
+    border-left: 1px solid #3d4f6f;
 }
 
 QComboBox::down-arrow {
+    image: url(:/assets/chevron-down.svg);
     width: 12px;
-    height: 12px;
+    height: 8px;
 }
 
 QComboBox QAbstractItemView {

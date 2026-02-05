@@ -152,7 +152,7 @@ class SettingsWidget(QWidget):
         # Settings group
         self.settings_group = QGroupBox(_("settings.title"))
         form_layout = QFormLayout(self.settings_group)
-        form_layout.setVerticalSpacing(16)
+        form_layout.setVerticalSpacing(20)
         form_layout.setHorizontalSpacing(20)
         form_layout.setContentsMargins(24, 32, 24, 24)
 
@@ -169,119 +169,27 @@ class SettingsWidget(QWidget):
         # Check interval with unit selector
         min_interval = get_min_check_interval()
         self.check_interval_label = QLabel(_("settings.check_interval"))
-        self.check_interval_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
 
         interval_container = QWidget()
         interval_layout = QHBoxLayout(interval_container)
         interval_layout.setContentsMargins(0, 8, 0, 8)
-        interval_layout.setSpacing(16)
+        interval_layout.setSpacing(12)
 
-        # Spinbox with hidden buttons - we'll add our own
         self.check_interval_spin = QSpinBox()
-        self.check_interval_spin.setMinimumWidth(80)
-        self.check_interval_spin.setMinimumHeight(40)
-        self.check_interval_spin.setButtonSymbols(QSpinBox.ButtonSymbols.NoButtons)
-        self.check_interval_spin.setStyleSheet("""
-            QSpinBox {
-                padding: 8px 12px;
-                font-size: 14px;
-                background-color: #2d2d2d;
-                color: white;
-                border: 1px solid #555;
-                border-radius: 4px;
-            }
-        """)
+        self.check_interval_spin.setMinimumWidth(140)
+        self.check_interval_spin.setFixedHeight(38)
+        self.check_interval_spin.setButtonSymbols(QSpinBox.ButtonSymbols.PlusMinus)
         interval_layout.addWidget(self.check_interval_spin)
-
-        # Custom up/down buttons with chevrons
-        arrow_container = QWidget()
-        arrow_layout = QVBoxLayout(arrow_container)
-        arrow_layout.setContentsMargins(0, 0, 0, 0)
-        arrow_layout.setSpacing(2)
-
-        self.interval_up_btn = QPushButton("+")
-        self.interval_up_btn.setFixedSize(28, 19)
-        self.interval_up_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3d3d3d;
-                color: white;
-                border: 1px solid #555;
-                border-radius: 3px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #5d5d5d; }
-            QPushButton:pressed { background-color: #FF6A3D; }
-        """)
-        self.interval_up_btn.clicked.connect(lambda: self.check_interval_spin.stepUp())
-        arrow_layout.addWidget(self.interval_up_btn)
-
-        self.interval_down_btn = QPushButton("-")
-        self.interval_down_btn.setFixedSize(28, 19)
-        self.interval_down_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3d3d3d;
-                color: white;
-                border: 1px solid #555;
-                border-radius: 3px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #5d5d5d; }
-            QPushButton:pressed { background-color: #FF6A3D; }
-        """)
-        self.interval_down_btn.clicked.connect(lambda: self.check_interval_spin.stepDown())
-        arrow_layout.addWidget(self.interval_down_btn)
-
-        interval_layout.addWidget(arrow_container)
 
         # Unit selector (seconds, minutes, hours)
         self.interval_unit_combo = QComboBox()
         self.interval_unit_combo.addItem(_("settings.unit_seconds"), "seconds")
         self.interval_unit_combo.addItem(_("settings.unit_minutes"), "minutes")
         self.interval_unit_combo.addItem(_("settings.unit_hours"), "hours")
-        self.interval_unit_combo.setMinimumWidth(110)
-        self.interval_unit_combo.setMinimumHeight(40)
-        self.interval_unit_combo.setStyleSheet("""
-            QComboBox {
-                padding: 8px 12px;
-                font-size: 14px;
-                background-color: #2d2d2d;
-                color: white;
-                border: 1px solid #555;
-                border-radius: 4px;
-            }
-            QComboBox::drop-down {
-                width: 0px;
-                border: none;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #2d2d2d;
-                color: white;
-                selection-background-color: #FF6A3D;
-                border: 1px solid #555;
-            }
-        """)
+        self.interval_unit_combo.setMinimumWidth(160)
+        self.interval_unit_combo.setFixedHeight(38)
         self.interval_unit_combo.currentIndexChanged.connect(self._on_interval_unit_changed)
         interval_layout.addWidget(self.interval_unit_combo)
-
-        # Dropdown button with chevron
-        self.combo_dropdown_btn = QPushButton("v")
-        self.combo_dropdown_btn.setFixedSize(28, 40)
-        self.combo_dropdown_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #3d3d3d;
-                color: white;
-                border: 1px solid #555;
-                border-radius: 3px;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #5d5d5d; }
-            QPushButton:pressed { background-color: #FF6A3D; }
-        """)
-        self.combo_dropdown_btn.clicked.connect(lambda: self.interval_unit_combo.showPopup())
-        interval_layout.addWidget(self.combo_dropdown_btn)
 
         interval_layout.addStretch()
 
@@ -495,7 +403,7 @@ class SettingsWidget(QWidget):
 
     def _set_interval_from_seconds(self, seconds: int) -> None:
         """Set interval spinbox and unit from seconds value."""
-        # Choose the best unit for display
+        # Prefer minutes as the default unit for readability
         if seconds >= 3600 and seconds % 3600 == 0:
             # Exact hours
             self.interval_unit_combo.setCurrentIndex(2)  # hours
@@ -506,8 +414,15 @@ class SettingsWidget(QWidget):
             self.interval_unit_combo.setCurrentIndex(1)  # minutes
             self._update_interval_range()
             self.check_interval_spin.setValue(seconds // 60)
+        elif seconds > 60:
+             # > 1 minute but not exact minute (e.g. 90s)
+             # Still display as seconds, but if user hasn't set anything, minutes is often better.
+             # However, for integer spinbox, we must stick to seconds if not divisible.
+            self.interval_unit_combo.setCurrentIndex(0)  # seconds
+            self._update_interval_range()
+            self.check_interval_spin.setValue(seconds)
         else:
-            # Seconds
+            # < 60 seconds
             self.interval_unit_combo.setCurrentIndex(0)  # seconds
             self._update_interval_range()
             self.check_interval_spin.setValue(seconds)
