@@ -1,10 +1,12 @@
-# StockAlert
+# AI StockAlert
 
 > Commercial-grade stock price monitoring with multi-channel alerts for Windows.
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/License-Proprietary-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-lightgrey.svg)](https://www.microsoft.com/windows)
+
+**[Download for Windows](https://ai-stock-alert-website.netlify.app/)** | **[Live Demo](https://ai-stock-alert-website.netlify.app/)**
 
 ## Features
 
