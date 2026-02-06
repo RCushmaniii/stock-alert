@@ -21,7 +21,7 @@ if sys.platform == "win32":
     try:
         # Use unique App ID - this tells Windows this is NOT generic python.exe
         # Increment version to force Windows to refresh cached icon
-        myappid = 'CushLabs.AIStockAlert.GUI.4.0'
+        myappid = 'CushLabs.StockAlert.MainApp.2026.v1'
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     except Exception:
         pass
@@ -31,13 +31,23 @@ if sys.platform == "win32":
     import contextlib
     from pathlib import Path as _Path
 
-    # Add Anaconda's DLL directories before other paths
-    base_prefix = _Path(sys.base_prefix)
-    dll_paths = [
-        base_prefix / "Library" / "bin",
-        base_prefix / "DLLs",
-        base_prefix,
-    ]
+    if getattr(sys, "frozen", False):
+        # Frozen build (cx_Freeze): add exe directory and lib/ so
+        # pywin32 DLLs (pywintypes312.dll, pythoncom312.dll) can be found
+        exe_dir = _Path(sys.executable).parent
+        dll_paths = [
+            exe_dir,
+            exe_dir / "lib",
+        ]
+    else:
+        # Development: add Anaconda's DLL directories
+        base_prefix = _Path(sys.base_prefix)
+        dll_paths = [
+            base_prefix / "Library" / "bin",
+            base_prefix / "DLLs",
+            base_prefix,
+        ]
+
     # Prepend to PATH environment variable
     current_path = os.environ.get("PATH", "")
     new_paths = [str(p) for p in dll_paths if p.exists()]
@@ -166,6 +176,30 @@ class InstanceLock:
                 self._lock_file = None
 
 
+def _activate_existing_instance() -> bool:
+    """Find and activate the existing StockAlert window.
+
+    This is called when a second instance is launched. Instead of showing
+    an error, we bring the existing window to the front for a seamless UX.
+
+    Uses IPC to tell the existing GUI to show its window properly via Qt methods.
+
+    Returns:
+        True if window was found and activated, False otherwise.
+    """
+    # Send IPC command to GUI to show window
+    # This is the only reliable way to show a Qt window that's hidden in the tray
+    try:
+        from stockalert.core.ipc import send_gui_command
+        response = send_gui_command("SHOW_WINDOW", timeout_ms=2000)
+        if response and "SUCCESS" in response:
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
 def main() -> int:
     """Main entry point for StockAlert."""
     args = parse_args()
@@ -178,26 +212,9 @@ def main() -> int:
     # Check for existing GUI instance (separate from service)
     instance_lock = InstanceLock("StockAlertGUI")
     if not instance_lock.acquire():
-        # Another instance is running - show message and exit
-        print("StockAlert is already running.", file=sys.stderr)
-        print("Check your system tray for the existing instance.", file=sys.stderr)
-
-        # Try to show a GUI message if possible
-        try:
-            from PyQt6.QtWidgets import QApplication, QMessageBox
-
-            temp_app = QApplication(sys.argv)
-            QMessageBox.warning(
-                None,
-                "StockAlert Already Running",
-                "Another instance of StockAlert is already running.\n\n"
-                "Check your system tray for the existing instance.",
-            )
-            temp_app.quit()
-        except Exception:
-            pass  # Silently fail if GUI not available
-
-        return 1
+        # Another instance is running - try to bring its window to front
+        _activate_existing_instance()
+        return 0  # Exit silently (not an error from user's perspective)
 
     # Set up logging early - write to file for debugging
     from pathlib import Path

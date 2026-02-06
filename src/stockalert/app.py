@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import QApplication, QDialog
 
 from stockalert.core.api_key_manager import provision_stockalert_api_key
 from stockalert.core.config import ConfigManager
-from stockalert.core.ipc import is_service_running, get_service_status, send_reload_config
+from stockalert.core.ipc import is_service_running, get_service_status, send_reload_config, GUIPipeServer
 from stockalert.core.paths import get_app_dir, get_bundled_assets_dir, get_config_path, migrate_config_if_needed
 from stockalert.core.windows_service import get_background_process_status, start_background_process
 from stockalert.i18n.translator import Translator, set_translator
@@ -95,6 +95,9 @@ class StockAlertApp:
         # Service status polling timer
         self._status_timer: QTimer | None = None
 
+        # GUI IPC server for handling SHOW_WINDOW from second instances
+        self._gui_pipe_server: GUIPipeServer | None = None
+
         logger.info(
             "StockAlert GUI initialized",
             extra={
@@ -152,16 +155,33 @@ class StockAlertApp:
 
         Falls back to a programmatic orange icon if the .ico file is missing.
         """
-        from PyQt6.QtCore import Qt
+        from PyQt6.QtCore import Qt, QSize
         from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
 
         ico_path = get_bundled_assets_dir() / "stock_alert.ico"
         if ico_path.exists():
             icon = QIcon(str(ico_path))
-            if not icon.isNull():
-                logger.info(f"Loaded app icon from {ico_path}")
+            sizes = icon.availableSizes()
+            if not icon.isNull() and len(sizes) > 0:
+                logger.info(f"Loaded app icon from {ico_path}, sizes={sizes}")
                 return icon
-            logger.warning(f"Icon file exists but failed to load: {ico_path}")
+
+            # Fallback: load as QPixmap at specific sizes
+            logger.info("QIcon(path) returned no sizes, loading via QPixmap")
+            icon = QIcon()
+            for size in [16, 32, 48, 64, 128, 256]:
+                pixmap = QPixmap(str(ico_path))
+                if not pixmap.isNull():
+                    scaled = pixmap.scaled(
+                        QSize(size, size),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                    icon.addPixmap(scaled)
+            if not icon.isNull():
+                logger.info(f"Loaded app icon via QPixmap scaling, sizes={icon.availableSizes()}")
+                return icon
+            logger.warning("QPixmap also failed to load .ico")
 
         # Fallback: programmatic orange icon
         logger.info("Using fallback programmatic icon")
@@ -289,12 +309,43 @@ class StockAlertApp:
         # Update status after a brief delay
         QTimer.singleShot(1000, self._update_service_status)
 
+    def _handle_gui_command(self, command: str) -> str:
+        """Handle IPC commands sent to the GUI (e.g., SHOW_WINDOW).
+
+        Called from background thread, so must use thread-safe Qt invocation.
+
+        Args:
+            command: Command string received via IPC.
+
+        Returns:
+            Response string.
+        """
+        logger.info(f"GUI IPC received command: {command}")
+        if command == "SHOW_WINDOW":
+            # Must invoke on main thread - QTimer.singleShot doesn't work from background thread
+            from PyQt6.QtCore import QMetaObject, Qt, Q_ARG
+            if self.main_window:
+                QMetaObject.invokeMethod(
+                    self.main_window,
+                    "_show_from_ipc",
+                    Qt.ConnectionType.QueuedConnection
+                )
+            return "SUCCESS"
+        elif command == "PING":
+            return "PONG"
+        else:
+            return f"UNKNOWN: {command}"
+
     def run(self) -> int:
         """Run the application.
 
         Returns:
             Exit code (0 for success).
         """
+        # Start GUI IPC server for handling SHOW_WINDOW from second instances
+        self._gui_pipe_server = GUIPipeServer(on_command=self._handle_gui_command)
+        self._gui_pipe_server.start()
+
         # Create Qt application
         self.qt_app = QApplication(sys.argv)
 
@@ -309,8 +360,11 @@ class StockAlertApp:
 
         # These fix the "Python" text in the taskbar right-click menu
         # Use translated strings so taskbar right-click shows correct language
-        self.qt_app.setApplicationName(_("app.name"))
-        self.qt_app.setApplicationDisplayName(_("app.description"))
+        app_name = _("app.name")
+        app_desc = _("app.description")
+        logger.info(f"Setting app name='{app_name}', displayName='{app_desc}'")
+        self.qt_app.setApplicationName(app_name)
+        self.qt_app.setApplicationDisplayName(app_desc)
         self.qt_app.setApplicationVersion("4.0.0")
         self.qt_app.setOrganizationName("CushLabs")
         self.qt_app.setOrganizationDomain("cushlabs.ai")

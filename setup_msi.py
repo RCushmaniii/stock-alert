@@ -28,7 +28,7 @@ from cx_Freeze import Executable, setup
 # Application metadata
 APP_NAME = "AI StockAlert"
 APP_VERSION = "4.0.0"
-APP_DESCRIPTION = "AI StockAlert"
+APP_DESCRIPTION = "AI StockAlert: Stock price monitoring with Windows notifications"
 APP_AUTHOR = "Robert Cushman"
 APP_COMPANY = "CUSHLABS.AI"
 APP_COPYRIGHT = "Copyright 2024-2026 CUSHLABS.AI"

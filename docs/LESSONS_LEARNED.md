@@ -9,12 +9,13 @@ This document captures important discoveries, gotchas, and solutions found durin
 1. [Build & Packaging](#build--packaging)
 2. [API & Rate Limiting](#api--rate-limiting)
 3. [Windows-Specific Issues](#windows-specific-issues)
-4. [PyQt6 UI Patterns](#pyqt6-ui-patterns)
-5. [Configuration & Storage](#configuration--storage)
-6. [Internationalization (i18n)](#internationalization-i18n)
-7. [Testing & Demos](#testing--demos)
-8. [Common Mistakes to Avoid](#common-mistakes-to-avoid)
-9. [WhatsApp Backend & API Keys](#whatsapp-backend--api-keys)
+4. [Single-Instance Application & IPC](#single-instance-application--ipc-critical) ⚠️ **READ THIS**
+5. [PyQt6 UI Patterns](#pyqt6-ui-patterns)
+6. [Configuration & Storage](#configuration--storage)
+7. [Internationalization (i18n)](#internationalization-i18n)
+8. [Testing & Demos](#testing--demos)
+9. [Common Mistakes to Avoid](#common-mistakes-to-avoid)
+10. [WhatsApp Backend & API Keys](#whatsapp-backend--api-keys)
 
 ---
 
@@ -174,6 +175,243 @@ executables = [
     )
 ]
 ```
+
+### pywin32 DLL Loading in Frozen Builds
+
+**Problem**: In cx_Freeze frozen builds, importing `win32api`, `win32pipe`, etc. fails with "DLL load failed while importing win32api: The specified procedure could not be found."
+
+**Root Cause**: The `.pyd` modules (win32api.pyd, win32pipe.pyd) need `pywintypes312.dll` loaded first, but they can't find it in the frozen environment.
+
+**Solution**: Pre-load the DLL using `ctypes.WinDLL()` BEFORE importing win32 modules:
+
+```python
+_HAS_PYWIN32 = False
+try:
+    import sys
+    if getattr(sys, "frozen", False):
+        import ctypes
+        from pathlib import Path
+        exe_dir = Path(sys.executable).parent
+        dll_paths = [
+            exe_dir / "pywintypes312.dll",
+            exe_dir / "lib" / "pywintypes312.dll",
+        ]
+        for dll_path in dll_paths:
+            if dll_path.exists():
+                try:
+                    ctypes.WinDLL(str(dll_path))
+                    break
+                except Exception:
+                    pass
+
+    import win32api
+    import win32pipe
+    # ... other win32 imports
+    _HAS_PYWIN32 = True
+except ImportError:
+    pass
+```
+
+**Key File**: `src/stockalert/core/ipc.py` - This pattern is critical for IPC (Named Pipes, Mutex) functionality.
+
+### Locale Files in Frozen Builds
+
+**Problem**: Translator looks for locale files inside `library.zip` where they can't be directly accessed.
+
+**Error in log**: `Locale file not found: C:\...\lib\library.zip\stockalert\i18n\locales\en.json`
+
+**Root Cause**: The service explicitly passed `locales_dir=Path(__file__).parent / "i18n" / "locales"` to Translator. In frozen builds, `__file__` points inside `library.zip`.
+
+**Solution**: Don't pass `locales_dir` - let Translator auto-detect using `_get_locales_dir()`:
+
+```python
+# WRONG - breaks in frozen builds
+self.translator = Translator(
+    locales_dir=Path(__file__).parent / "i18n" / "locales"
+)
+
+# CORRECT - auto-detects based on sys.frozen
+self.translator = Translator()
+```
+
+The `Translator._get_locales_dir()` function already handles frozen builds correctly by returning `exe_dir / "lib" / "stockalert" / "i18n" / "locales"`.
+
+---
+
+## Single-Instance Application & IPC (CRITICAL)
+
+This section documents the extensive struggles with implementing single-instance behavior and window activation. **This took days to get right.**
+
+### The Problem
+
+When a user clicks the app icon (Start Menu, desktop shortcut) while it's already running in the system tray:
+- **Expected**: Existing window appears
+- **Wrong behavior 1**: Error dialog "StockAlert is already running" (unfriendly)
+- **Wrong behavior 2**: Nothing happens (confusing)
+- **Wrong behavior 3**: Blank white window appears (broken)
+
+### Architecture Overview
+
+StockAlert has a **GUI/Service split architecture**:
+- **GUI Process** (`StockAlert.exe`): PyQt6 window, can minimize to system tray
+- **Service Process** (`StockAlert.exe --service`): Headless monitoring, Named Pipe server for IPC
+- **Second Instance** (user clicks app again): Should tell GUI to show window, then exit
+
+### Failed Approaches (Don't Do These)
+
+#### ❌ Approach 1: Show Error Dialog
+```python
+# WRONG - Unfriendly UX
+if not instance_lock.acquire():
+    QMessageBox.warning(None, "Already Running",
+        "Check your system tray for the existing instance.")
+    return 1
+```
+**Problem**: Users don't know what a "system tray" is. They just want the window to appear.
+
+#### ❌ Approach 2: Windows API FindWindow + ShowWindow
+```python
+# WRONG - Causes blank white window with Qt
+user32 = ctypes.windll.user32
+hwnd = user32.FindWindowW(None, "AI StockAlert...")
+if hwnd:
+    user32.ShowWindow(hwnd, SW_RESTORE)
+    user32.SetForegroundWindow(hwnd)
+```
+**Problem**: Windows API's `ShowWindow()` on a Qt window that's hidden via `hide()` results in a **blank white window**. The Qt widgets don't render because Qt didn't properly prepare the window for display.
+
+#### ❌ Approach 3: QTimer.singleShot from Background Thread
+```python
+# WRONG - QTimer.singleShot doesn't work from non-Qt threads
+def _handle_ipc_command(self, command):
+    if command == "SHOW_WINDOW":
+        QTimer.singleShot(0, self._show_main_window)  # Silent failure!
+```
+**Problem**: `QTimer.singleShot()` called from a background thread (IPC server thread) silently fails. The callback never executes.
+
+### ✅ The Correct Solution: IPC + QMetaObject.invokeMethod
+
+**Step 1: Single-Instance Detection via Lock File**
+
+In `__main__.py`:
+```python
+class InstanceLock:
+    """Uses file locking for single-instance detection."""
+
+    def acquire(self) -> bool:
+        try:
+            self._lock_file = open(self._lock_path, "w")
+            msvcrt.locking(self._lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+            return True
+        except (OSError, IOError):
+            return False  # Another instance has the lock
+```
+
+**Step 2: GUI IPC Server (Named Pipe)**
+
+In `core/ipc.py`:
+```python
+GUI_PIPE_NAME = "\\\\.\\pipe\\StockAlertGUIPipe"
+
+class GUIPipeServer:
+    """Listens for commands from second instances."""
+
+    def __init__(self, on_command: Callable[[str], str]):
+        self._on_command = on_command
+        self._thread = threading.Thread(target=self._server_loop, daemon=True)
+
+    def _server_loop(self):
+        while self._running:
+            # Create pipe, wait for connection, read command, send response
+            h_pipe = win32pipe.CreateNamedPipe(GUI_PIPE_NAME, ...)
+            win32pipe.ConnectNamedPipe(h_pipe, None)
+            result, data = win32file.ReadFile(h_pipe, BUFFER_SIZE)
+            response = self._on_command(data.decode("utf-8"))
+            win32file.WriteFile(h_pipe, response.encode("utf-8"))
+```
+
+**Step 3: Thread-Safe Window Activation**
+
+In `app.py` - **CRITICAL: Use QMetaObject.invokeMethod, NOT QTimer.singleShot**:
+```python
+def _handle_gui_command(self, command: str) -> str:
+    """Called from background IPC thread."""
+    if command == "SHOW_WINDOW":
+        # QTimer.singleShot DOES NOT WORK from background thread!
+        # Must use QMetaObject.invokeMethod with QueuedConnection
+        from PyQt6.QtCore import QMetaObject, Qt
+        QMetaObject.invokeMethod(
+            self.main_window,
+            "_show_from_ipc",
+            Qt.ConnectionType.QueuedConnection
+        )
+        return "SUCCESS"
+```
+
+In `main_window.py` - **The slot must be decorated with @pyqtSlot()**:
+```python
+from PyQt6.QtCore import pyqtSlot
+
+class MainWindow(QMainWindow):
+    @pyqtSlot()
+    def _show_from_ipc(self) -> None:
+        """Qt slot - can be safely invoked from background thread."""
+        self.showMaximized()
+        self.raise_()
+        self.activateWindow()
+```
+
+**Step 4: Second Instance Sends Command and Exits Silently**
+
+In `__main__.py`:
+```python
+def _activate_existing_instance() -> bool:
+    """Send IPC command to existing GUI to show window."""
+    from stockalert.core.ipc import send_gui_command
+    response = send_gui_command("SHOW_WINDOW", timeout_ms=2000)
+    return response and "SUCCESS" in response
+
+def main():
+    instance_lock = InstanceLock("StockAlertGUI")
+    if not instance_lock.acquire():
+        _activate_existing_instance()
+        return 0  # Exit silently (not an error!)
+```
+
+### Key Files for Single-Instance/IPC
+
+| File | Purpose |
+|------|---------|
+| `src/stockalert/__main__.py` | Instance lock, `_activate_existing_instance()` |
+| `src/stockalert/core/ipc.py` | `GUIPipeServer`, `send_gui_command()` |
+| `src/stockalert/app.py` | `_handle_gui_command()`, starts GUIPipeServer |
+| `src/stockalert/ui/main_window.py` | `_show_from_ipc()` slot |
+
+### Debugging Tips
+
+**Check if IPC is working:**
+```bash
+tail -f stockalert.log | grep -i "IPC\|SHOW_WINDOW"
+```
+
+**Expected log entries when second instance activates first:**
+```
+INFO | GUI pipe server started: \\.\pipe\StockAlertGUIPipe
+INFO | GUI IPC received command: SHOW_WINDOW
+INFO | Showing window via IPC request
+```
+
+**If window doesn't appear:**
+1. Check "GUI pipe server started" appears in log
+2. Check "GUI IPC received command: SHOW_WINDOW" appears
+3. If command received but window doesn't show → check `_show_from_ipc` is decorated with `@pyqtSlot()`
+
+### Why This Is So Hard
+
+1. **Qt + Windows + Threads**: Qt has strict thread affinity for GUI operations
+2. **Hidden vs Minimized**: A Qt window hidden with `hide()` is NOT the same as minimized - Windows API doesn't understand this
+3. **Silent Failures**: `QTimer.singleShot` from wrong thread just silently does nothing
+4. **Named Pipes**: pywin32 adds complexity (see pywin32 DLL loading section)
 
 ---
 
@@ -386,6 +624,7 @@ After any change, test:
 3. Can add/edit/delete tickers
 4. Tier limits show after test connection (not before)
 5. Background service start/stop works
+6. **Single-instance behavior**: Close window (goes to tray), click Start Menu icon → window should reappear (not error, not blank)
 
 ---
 
@@ -426,6 +665,30 @@ After any change, test:
 **What happened**: `taskkill /f /im` didn't work.
 
 **Lesson**: Use `//F //IM` for Windows commands in Git Bash.
+
+### 7. Using Windows API ShowWindow on Qt Hidden Windows
+
+**What happened**: Used `FindWindow()` + `ShowWindow()` to bring existing window to front. Result: blank white window.
+
+**Lesson**: Qt windows hidden with `hide()` cannot be shown with Windows API. Must use Qt methods (`showMaximized()`, etc.) via IPC.
+
+### 8. Using QTimer.singleShot from Background Thread
+
+**What happened**: IPC server received SHOW_WINDOW command, called `QTimer.singleShot(0, self._show_window)`. Nothing happened.
+
+**Lesson**: `QTimer.singleShot()` silently fails when called from non-Qt thread. Use `QMetaObject.invokeMethod()` with `Qt.ConnectionType.QueuedConnection` instead.
+
+### 9. Passing Path(__file__) in Frozen Builds
+
+**What happened**: Service passed `locales_dir=Path(__file__).parent / "i18n/locales"` to Translator. Locale files not found.
+
+**Lesson**: In cx_Freeze frozen builds, `__file__` points inside `library.zip`. Never use `Path(__file__)` for resource paths. Use functions that detect frozen state (like `_get_locales_dir()`).
+
+### 10. Forgetting to Pre-load pywin32 DLLs
+
+**What happened**: IPC using Named Pipes failed with "DLL load failed while importing win32api".
+
+**Lesson**: In frozen builds, pywin32's `.pyd` files can't find `pywintypes312.dll`. Pre-load it with `ctypes.WinDLL()` before importing win32 modules.
 
 ---
 
@@ -511,4 +774,4 @@ python setup_msi.py build_exe
 
 ---
 
-*Last updated: February 2026*
+*Last updated: February 6, 2026*

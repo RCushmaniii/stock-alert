@@ -68,11 +68,9 @@ class StockAlertService:
         # Auto-provision WhatsApp backend API key (transparent to user)
         provision_stockalert_api_key()
 
-        # Initialize translator
+        # Initialize translator (let Translator auto-detect locales dir for frozen builds)
         language = self.config_manager.get("settings.language", "en")
-        self.translator = Translator(
-            locales_dir=Path(__file__).parent / "i18n" / "locales"
-        )
+        self.translator = Translator()
         self.translator.set_language(language)
         set_translator(self.translator)
 
@@ -300,6 +298,15 @@ def run_foreground(config_path: Path | None = None, debug: bool = False) -> int:
     Returns:
         Exit code
     """
+    # Set up logging for the service process
+    # Log to service-specific file in the same directory as the executable
+    if getattr(sys, "frozen", False):
+        log_path = Path(sys.executable).parent / "stockalert_service.log"
+    else:
+        log_path = Path(__file__).parent.parent.parent / "stockalert_service.log"
+    setup_logging(debug=debug, log_file=log_path)
+    logger.info(f"Service starting (PID: {os.getpid()})")
+
     from stockalert.core.ipc import ServiceMutex, NamedPipeServer
 
     # 1. Try to acquire the Global Mutex (single instance check)

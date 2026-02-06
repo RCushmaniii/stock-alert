@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "stockalert"
 version = "4.0.0"
-description = "Commercial-grade stock price monitoring with Windows notifications"
+description = "AI StockAlert: Stock price monitoring with Windows notifications"
 readme = "README.md"
 license = {text = "Proprietary"}
 authors = [

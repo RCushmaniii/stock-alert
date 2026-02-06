@@ -92,11 +92,12 @@ class MainWindow(QMainWindow):
 
     def _setup_ui(self) -> None:
         """Set up the user interface."""
-        self.setWindowTitle(_("app.description"))
+        title = _("app.description")
+        self.setWindowTitle(title)
+        logger.info(f"Window title set to: '{title}'")
 
         # Use branded .ico file for window icon (shows on taskbar)
         self.setWindowIcon(self._create_app_icon())
-        logger.info("Set window icon from .ico file")
 
         # Main central widget
         central_widget = QWidget()
@@ -2107,20 +2108,40 @@ QDialog {{
     def _create_app_icon(self) -> QIcon:
         """Load the branded app icon from the .ico file.
 
+        Uses QImage.fromData to read the .ico file directly (avoids Qt plugin issues).
         Falls back to a programmatic orange icon if the .ico file is missing.
         """
+        from PyQt6.QtCore import Qt, QSize
+        from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor, QPen
+
         ico_path = get_bundled_assets_dir() / "stock_alert.ico"
         if ico_path.exists():
+            # Read the .ico file and create a QIcon with multiple sizes
+            # QIcon(path) may fail if Qt's ICO plugin isn't found in frozen builds
             icon = QIcon(str(ico_path))
-            if not icon.isNull():
-                logger.info(f"Loaded app icon from {ico_path}")
+            sizes = icon.availableSizes()
+            if not icon.isNull() and len(sizes) > 0:
+                logger.info(f"Loaded app icon from {ico_path}, sizes={sizes}")
                 return icon
-            logger.warning(f"Icon file exists but failed to load: {ico_path}")
+
+            # Fallback: load as QPixmap at specific sizes
+            logger.info("QIcon(path) returned no sizes, loading via QPixmap")
+            icon = QIcon()
+            for size in [16, 32, 48, 64, 128, 256]:
+                pixmap = QPixmap(str(ico_path))
+                if not pixmap.isNull():
+                    scaled = pixmap.scaled(
+                        QSize(size, size),
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
+                    icon.addPixmap(scaled)
+            if not icon.isNull():
+                logger.info(f"Loaded app icon via QPixmap scaling, sizes={icon.availableSizes()}")
+                return icon
+            logger.warning("QPixmap also failed to load .ico")
 
         # Fallback: programmatic orange icon
-        from PyQt6.QtCore import Qt
-        from PyQt6.QtGui import QPixmap, QPainter, QColor, QPen
-
         logger.info("Using fallback programmatic icon")
         icon = QIcon()
         for size in [16, 24, 32, 48, 64, 128, 256]:
@@ -2818,6 +2839,18 @@ QDialog {{
             if event is not None:
                 event.ignore()
             self.hide()
+
+    @pyqtSlot()
+    def _show_from_ipc(self) -> None:
+        """Show window when requested via IPC from a second instance.
+
+        This is a Qt slot that can be safely invoked from a background thread
+        using QMetaObject.invokeMethod with QueuedConnection.
+        """
+        logger.info("Showing window via IPC request")
+        self.showMaximized()
+        self.raise_()
+        self.activateWindow()
 
     def _save_window_geometry(self) -> None:
         """Save window position and size to config."""

@@ -1,16 +1,16 @@
 ; StockAlert Inno Setup Script
 ; Professional installer with desktop shortcut and launch-after-install options
 
-#define MyAppName "StockAlert"
-#define MyAppVersion "3.0.0"
+#define MyAppName "AI StockAlert"
+#define MyAppVersion "4.0.0"
 #define MyAppPublisher "CUSHLABS.AI"
 #define MyAppURL "https://cushlabs.ai"
 #define MyAppExeName "StockAlert.exe"
-#define MyAppDescription "Commercial-grade stock price monitoring with Windows notifications"
+#define MyAppDescription "AI StockAlert: Stock price monitoring with Windows notifications"
 
 [Setup]
 ; Unique application ID - DO NOT CHANGE after first release
-AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
+AppId={{52ED9883-9713-4F05-8B5A-E78A7D1DD992}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
@@ -55,16 +55,18 @@ Name: "startmenu"; Description: "Create a Start Menu shortcut"; GroupDescription
 [Files]
 ; Main application files from cx_Freeze build
 Source: "build\exe.win-amd64-3.12\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+; Application icon (for shortcuts)
+Source: "stock_alert.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; Environment template for user configuration
 Source: ".env.example"; DestDir: "{app}"; Flags: ignoreversion
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
-; Start Menu shortcut
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: startmenu
-Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; Tasks: startmenu
-; Desktop shortcut
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+; Start Menu shortcut - ALWAYS created (not tied to task)
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\stock_alert.ico"
+Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
+; Desktop shortcut - optional (user can choose)
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\stock_alert.ico"; Tasks: desktopicon
 
 [Run]
 ; Launch after install - checked by default

@@ -18,18 +18,51 @@ import threading
 import time
 from typing import Any, Callable
 
-import win32api
-import win32event
-import win32file
-import win32pipe
-import winerror
+_HAS_PYWIN32 = False
+_PYWIN32_IMPORT_ERROR = ""
+
+try:
+    # In frozen builds, we need to pre-load pywintypes DLL before importing win32 modules
+    import sys
+    if getattr(sys, "frozen", False):
+        import ctypes
+        from pathlib import Path
+        exe_dir = Path(sys.executable).parent
+        dll_paths = [
+            exe_dir / "pywintypes312.dll",
+            exe_dir / "lib" / "pywintypes312.dll",
+        ]
+        for dll_path in dll_paths:
+            if dll_path.exists():
+                try:
+                    ctypes.WinDLL(str(dll_path))
+                    break
+                except Exception:
+                    pass
+
+    import win32api
+    import win32event
+    import win32file
+    import win32pipe
+    import winerror
+    _HAS_PYWIN32 = True
+except ImportError as e:
+    _PYWIN32_IMPORT_ERROR = f"ImportError: {e}"
+except Exception as e:
+    _PYWIN32_IMPORT_ERROR = f"{type(e).__name__}: {e}"
 
 logger = logging.getLogger(__name__)
+
+# Log pywin32 import status
+if not _HAS_PYWIN32:
+    _err = globals().get('_PYWIN32_IMPORT_ERROR', 'Unknown error')
+    logger.error(f"pywin32 import failed: {_err}")
 
 # Named Pipe and Mutex names
 # The pipe prefix \\.\pipe\ is mandatory on Windows
 # Build the string to ensure correct escaping: \\.\pipe\name
 PIPE_NAME = "\\\\" + "." + "\\" + "pipe" + "\\" + "StockAlertServicePipe"
+GUI_PIPE_NAME = "\\\\" + "." + "\\" + "pipe" + "\\" + "StockAlertGUIPipe"
 # Local\ for current user session (no admin required)
 MUTEX_NAME = "Local" + "\\" + "StockAlertServiceMutex"
 BUFFER_SIZE = 4096
@@ -48,6 +81,9 @@ class ServiceMutex:
             True if acquired (we're the only instance),
             False if another instance holds it.
         """
+        if not _HAS_PYWIN32:
+            logger.debug("pywin32 not available, mutex disabled")
+            return True
         try:
             # Create a named mutex
             # If it already exists, GetLastError() returns ERROR_ALREADY_EXISTS
@@ -71,6 +107,8 @@ class ServiceMutex:
 
     def release(self) -> None:
         """Release the mutex."""
+        if not _HAS_PYWIN32 or not self._handle:
+            return
         if self._handle:
             try:
                 win32api.CloseHandle(self._handle)
@@ -96,6 +134,9 @@ class NamedPipeServer:
 
     def start(self) -> bool:
         """Start the pipe server in a background thread."""
+        if not _HAS_PYWIN32:
+            logger.warning("pywin32 not available, IPC server disabled")
+            return False
         if self._running:
             return True
 
@@ -189,6 +230,9 @@ def send_command(command: str, timeout_ms: int = 1000) -> str | None:
     Returns:
         Response string, or None if service not available.
     """
+    if not _HAS_PYWIN32:
+        logger.debug("pywin32 not available, IPC disabled")
+        return None
     try:
         # Wait for the pipe to be available
         # Note: WaitNamedPipe returns None on success, raises exception on failure
@@ -286,3 +330,137 @@ def send_stop_service() -> bool:
     """
     response = send_command("STOP", timeout_ms=1000)
     return response is not None and "SUCCESS" in response
+
+
+def send_gui_command(command: str, timeout_ms: int = 1000) -> str | None:
+    """Send a command to the GUI and get the response.
+
+    Args:
+        command: Command string to send.
+        timeout_ms: Timeout in milliseconds.
+
+    Returns:
+        Response string, or None if GUI not available.
+    """
+    if not _HAS_PYWIN32:
+        return None
+    try:
+        try:
+            win32pipe.WaitNamedPipe(GUI_PIPE_NAME, timeout_ms)
+        except Exception as e:
+            error_code = getattr(e, "winerror", 0)
+            if error_code == 2:  # ERROR_FILE_NOT_FOUND
+                return None
+            pass  # Try to connect anyway
+
+        handle = win32file.CreateFile(
+            GUI_PIPE_NAME,
+            win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+            0,
+            None,
+            win32file.OPEN_EXISTING,
+            0,
+            None,
+        )
+
+        try:
+            win32pipe.SetNamedPipeHandleState(
+                handle,
+                win32pipe.PIPE_READMODE_MESSAGE,
+                None,
+                None,
+            )
+            win32file.WriteFile(handle, command.encode("utf-8"))
+            result, data = win32file.ReadFile(handle, BUFFER_SIZE)
+            return data.decode("utf-8")
+        finally:
+            win32file.CloseHandle(handle)
+
+    except Exception:
+        return None
+
+
+class GUIPipeServer:
+    """Named Pipe server for the GUI to receive commands (like SHOW_WINDOW)."""
+
+    def __init__(self, on_command: Callable[[str], str]) -> None:
+        """Initialize the GUI pipe server.
+
+        Args:
+            on_command: Callback to handle incoming commands.
+        """
+        self._on_command = on_command
+        self._running = False
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> bool:
+        """Start the pipe server in a background thread."""
+        if not _HAS_PYWIN32:
+            logger.info("pywin32 not available, GUI IPC server disabled")
+            return False
+        if self._running:
+            return True
+
+        self._running = True
+        self._thread = threading.Thread(target=self._server_loop, daemon=True)
+        self._thread.start()
+        logger.info(f"GUI pipe server started: {GUI_PIPE_NAME}")
+        return True
+
+    def stop(self) -> None:
+        """Stop the pipe server."""
+        self._running = False
+        # Connect to our own pipe to unblock WaitForConnection
+        try:
+            handle = win32file.CreateFile(
+                GUI_PIPE_NAME,
+                win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+                0,
+                None,
+                win32file.OPEN_EXISTING,
+                0,
+                None,
+            )
+            win32file.CloseHandle(handle)
+        except Exception:
+            pass
+
+        if self._thread:
+            self._thread.join(timeout=2.0)
+            self._thread = None
+
+    def _server_loop(self) -> None:
+        """Main server loop."""
+        while self._running:
+            h_pipe = None
+            try:
+                h_pipe = win32pipe.CreateNamedPipe(
+                    GUI_PIPE_NAME,
+                    win32pipe.PIPE_ACCESS_DUPLEX,
+                    win32pipe.PIPE_TYPE_MESSAGE | win32pipe.PIPE_READMODE_MESSAGE | win32pipe.PIPE_WAIT,
+                    win32pipe.PIPE_UNLIMITED_INSTANCES,
+                    BUFFER_SIZE,
+                    BUFFER_SIZE,
+                    0,
+                    None,
+                )
+                win32pipe.ConnectNamedPipe(h_pipe, None)
+
+                if not self._running:
+                    break
+
+                result, data = win32file.ReadFile(h_pipe, BUFFER_SIZE)
+                command = data.decode("utf-8").strip()
+                response = self._on_command(command)
+                win32file.WriteFile(h_pipe, response.encode("utf-8"))
+
+            except Exception:
+                if self._running:
+                    pass  # Silently ignore errors
+            finally:
+                if h_pipe:
+                    try:
+                        win32pipe.DisconnectNamedPipe(h_pipe)
+                        win32file.CloseHandle(h_pipe)
+                    except Exception:
+                        pass
