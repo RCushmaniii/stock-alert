@@ -413,6 +413,49 @@ INFO | Showing window via IPC request
 3. **Silent Failures**: `QTimer.singleShot` from wrong thread just silently does nothing
 4. **Named Pipes**: pywin32 adds complexity (see pywin32 DLL loading section)
 
+### Service Single-Instance (Mutex)
+
+The background service uses a Windows Mutex (not file locking) for single-instance:
+
+```python
+# In core/ipc.py
+MUTEX_NAME = "Local\\StockAlertServiceMutex"
+
+class ServiceMutex:
+    def acquire(self) -> bool:
+        self._handle = win32event.CreateMutex(None, False, MUTEX_NAME)
+        if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+            return False  # Another service is running
+        return True
+```
+
+This is separate from the GUI's `InstanceLock` - both can run simultaneously (GUI + Service), but not multiple GUIs or multiple services.
+
+### Frontend → Backend Config Sync
+
+When user saves settings in the GUI, the backend service needs to pick up changes:
+
+**Method 1: Immediate IPC (preferred)**
+```python
+# In app.py _on_settings_changed()
+if is_service_running():
+    send_reload_config()  # Sends "RELOAD_SETTINGS" via Named Pipe
+```
+
+**Method 2: File watching (backup)**
+```python
+# In service.py run_forever()
+while self._running:
+    if self._check_config_changes():  # Checks mtime every 60 seconds
+        self._reload_config()
+```
+
+The service's `_reload_config()` method:
+- Reloads config from disk
+- Updates language if changed
+- Updates alert settings (WhatsApp enabled, etc.)
+- Reloads ticker list
+
 ---
 
 ## PyQt6 UI Patterns
