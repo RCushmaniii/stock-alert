@@ -25,6 +25,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from stockalert.core.currency import get_formatter
 from stockalert.core.tier_limits import can_add_ticker, get_max_news_tickers, get_max_tickers
 from stockalert.i18n.translator import _
 
@@ -99,18 +100,22 @@ class TickerDialog(QDialog):
         self.name_edit = QLineEdit()
         form_layout.addRow(_("tickers.name") + ":", self.name_edit)
 
+        # Get currency symbol for spinbox prefix
+        formatter = get_formatter()
+        currency_symbol = formatter.symbol if formatter else "$"
+
         # High threshold
         self.high_spin = QDoubleSpinBox()
         self.high_spin.setRange(0.01, 999999.99)
         self.high_spin.setDecimals(2)
-        self.high_spin.setPrefix("$")
+        self.high_spin.setPrefix(currency_symbol)
         form_layout.addRow(_("tickers.high_threshold") + ":", self.high_spin)
 
         # Low threshold
         self.low_spin = QDoubleSpinBox()
         self.low_spin.setRange(0.01, 999999.99)
         self.low_spin.setDecimals(2)
-        self.low_spin.setPrefix("$")
+        self.low_spin.setPrefix(currency_symbol)
         form_layout.addRow(_("tickers.low_threshold") + ":", self.low_spin)
 
         # Enabled
@@ -256,7 +261,9 @@ class TickerDialog(QDialog):
                 logger.info(f"Got price for {symbol}: {price}")
                 if price is not None:
                     self._current_price = price
-                    self.price_label.setText(f"${price:.2f}")
+                    formatter = get_formatter()
+                    price_str = formatter.format_price(price) if formatter else f"${price:.2f}"
+                    self.price_label.setText(price_str)
                     self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #00AA00;")
                 else:
                     self.price_label.setText("N/A (market closed?)")
@@ -276,8 +283,19 @@ class TickerDialog(QDialog):
         """Load ticker data into the form."""
         self.symbol_edit.setText(ticker.get("symbol", ""))
         self.name_edit.setText(ticker.get("name", ""))
-        self.high_spin.setValue(ticker.get("high_threshold", 0.0))
-        self.low_spin.setValue(ticker.get("low_threshold", 0.0))
+
+        # Convert USD thresholds to display currency
+        formatter = get_formatter()
+        high_usd = ticker.get("high_threshold", 0.0)
+        low_usd = ticker.get("low_threshold", 0.0)
+
+        if formatter:
+            self.high_spin.setValue(formatter.convert(high_usd))
+            self.low_spin.setValue(formatter.convert(low_usd))
+        else:
+            self.high_spin.setValue(high_usd)
+            self.low_spin.setValue(low_usd)
+
         self.enabled_check.setChecked(ticker.get("enabled", True))
         self.news_check.setChecked(ticker.get("news_enabled", False))
 
@@ -369,7 +387,9 @@ class TickerDialog(QDialog):
                     price = provider.get_price(symbol)
                     if price is not None:
                         self._current_price = price
-                        self.price_label.setText(f"${price:.2f}")
+                        formatter = get_formatter()
+                        price_str = formatter.format_price(price) if formatter else f"${price:.2f}"
+                        self.price_label.setText(price_str)
                         self.price_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #00AA00;")
                     else:
                         self.price_label.setText("N/A")
@@ -449,34 +469,43 @@ class TickerDialog(QDialog):
         if self._current_price is None or self._current_price <= 0:
             return None
 
-        high = self.high_spin.value()
-        low = self.low_spin.value()
-        price = self._current_price
+        # Get display values (already in display currency)
+        high_display = self.high_spin.value()
+        low_display = self.low_spin.value()
+
+        # Convert price to display currency for comparison
+        formatter = get_formatter()
+        if formatter:
+            price_display = formatter.convert(self._current_price)
+            fmt = formatter.format_price
+        else:
+            price_display = self._current_price
+            fmt = lambda x: f"${x:.2f}"
 
         warnings = []
 
         # Warn if high threshold is more than 5x current price
-        if high > price * 5:
-            ratio = high / price
+        if high_display > price_display * 5:
+            ratio = high_display / price_display
             warnings.append(
-                f"High threshold (${high:.2f}) is {ratio:.1f}x the current price (${price:.2f})"
+                f"High threshold ({fmt(high_display)}) is {ratio:.1f}x the current price ({fmt(price_display)})"
             )
 
         # Warn if low threshold is less than 20% of current price
-        if low < price * 0.2:
-            ratio = price / low
+        if low_display < price_display * 0.2:
+            ratio = price_display / low_display
             warnings.append(
-                f"Low threshold (${low:.2f}) is {ratio:.1f}x below the current price (${price:.2f})"
+                f"Low threshold ({fmt(low_display)}) is {ratio:.1f}x below the current price ({fmt(price_display)})"
             )
 
         # Warn if thresholds are very close to current price (within 1%)
-        if abs(high - price) / price < 0.01:
+        if abs(high_display - price_display) / price_display < 0.01:
             warnings.append(
-                f"High threshold (${high:.2f}) is within 1% of current price - may trigger immediately"
+                f"High threshold ({fmt(high_display)}) is within 1% of current price - may trigger immediately"
             )
-        if abs(low - price) / price < 0.01:
+        if abs(low_display - price_display) / price_display < 0.01:
             warnings.append(
-                f"Low threshold (${low:.2f}) is within 1% of current price - may trigger immediately"
+                f"Low threshold ({fmt(low_display)}) is within 1% of current price - may trigger immediately"
             )
 
         if warnings:
@@ -511,10 +540,23 @@ class TickerDialog(QDialog):
         try:
             symbol = self.symbol_edit.text().strip().upper()
             name = self.name_edit.text().strip() or symbol
-            high = self.high_spin.value()
-            low = self.low_spin.value()
+            high_display = self.high_spin.value()
+            low_display = self.low_spin.value()
             enabled = self.enabled_check.isChecked()
             news_enabled = self.news_check.isChecked()
+
+            # Convert display currency back to USD for storage
+            formatter = get_formatter()
+            if formatter:
+                high = formatter.parse_user_input(str(high_display))
+                low = formatter.parse_user_input(str(low_display))
+                if high is None:
+                    high = high_display  # Fallback
+                if low is None:
+                    low = low_display  # Fallback
+            else:
+                high = high_display
+                low = low_display
 
             # Validate news limit if trying to enable news
             if news_enabled:

@@ -35,6 +35,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from stockalert.api.exchange_rate import get_usd_to_mxn_rate, set_api_key as set_exchange_rate_api_key
+from stockalert.core.currency import CurrencyFormatter, set_formatter as set_global_formatter
 from stockalert.core.paths import get_bundled_assets_dir
 from stockalert.i18n.translator import _
 from stockalert.ui.dialogs.profile_dialog import ProfileWidget
@@ -81,6 +83,18 @@ class MainWindow(QMainWindow):
         self._network_manager = QNetworkAccessManager(self)
         self._network_manager.finished.connect(self._on_logo_loaded)
         self._pending_logos: dict[str, tuple[int, str]] = {}  # url -> (row, symbol)
+
+        # Initialize currency formatter
+        self.currency_formatter = CurrencyFormatter(config_manager)
+        set_global_formatter(self.currency_formatter)
+
+        # Set up exchange rate API key (embedded in app)
+        exchange_rate_api_key = "3d58df6495d387cd6a2e0648"
+        set_exchange_rate_api_key(exchange_rate_api_key)
+
+        # Pre-fetch exchange rate if currency is MXN
+        if config_manager.get("settings.currency", "USD") == "MXN":
+            self._refresh_exchange_rate()
 
         self._setup_ui()
         self._load_data()
@@ -235,6 +249,32 @@ class MainWindow(QMainWindow):
         # Set initial language state
         current_lang = self.config_manager.get("settings.language", "en")
         self._update_lang_buttons(current_lang)
+
+        # Spacer between language and currency
+        header_layout.addSpacing(16)
+
+        # Currency switcher - USD | MXN style
+        self.currency_usd_btn = QPushButton("USD")
+        self.currency_usd_btn.setObjectName("langButton")  # Reuse lang button style
+        self.currency_usd_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.currency_usd_btn.setCheckable(True)
+        self.currency_usd_btn.clicked.connect(lambda: self._set_currency("USD"))
+        header_layout.addWidget(self.currency_usd_btn)
+
+        currency_separator = QLabel("|")
+        currency_separator.setObjectName("langSeparator")
+        header_layout.addWidget(currency_separator)
+
+        self.currency_mxn_btn = QPushButton("MXN")
+        self.currency_mxn_btn.setObjectName("langButton")  # Reuse lang button style
+        self.currency_mxn_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.currency_mxn_btn.setCheckable(True)
+        self.currency_mxn_btn.clicked.connect(lambda: self._set_currency("MXN"))
+        header_layout.addWidget(self.currency_mxn_btn)
+
+        # Set initial currency state
+        current_currency = self.config_manager.get("settings.currency", "USD")
+        self._update_currency_buttons(current_currency)
 
         # Spacer
         header_layout.addSpacing(24)
@@ -2164,6 +2204,38 @@ QDialog {{
         if hasattr(self, 'settings_widget') and self.settings_widget:
             self.settings_widget.retranslate_ui()
 
+    def _update_currency_buttons(self, current_currency: str) -> None:
+        """Update currency button styles to show current selection."""
+        self.currency_usd_btn.setChecked(current_currency == "USD")
+        self.currency_mxn_btn.setChecked(current_currency == "MXN")
+
+    def _set_currency(self, currency: str) -> None:
+        """Set the display currency."""
+        logger.info(f"Header button: changing currency to '{currency}'")
+        self.config_manager.set("settings.currency", currency, save=True)
+        self._update_currency_buttons(currency)
+
+        # Update the currency formatter
+        if hasattr(self, 'currency_formatter') and self.currency_formatter:
+            # Refresh exchange rate if switching to MXN
+            if currency == "MXN":
+                self._refresh_exchange_rate()
+
+        # Refresh ticker display to show new currency
+        self._refresh_ticker_table()
+
+    def _refresh_exchange_rate(self) -> None:
+        """Refresh the exchange rate from the API."""
+        try:
+            rate = get_usd_to_mxn_rate()
+            if rate:
+                self.currency_formatter.set_exchange_rate(rate)
+                logger.info(f"Exchange rate updated: 1 USD = {rate:.4f} MXN")
+            else:
+                logger.warning("Failed to fetch exchange rate")
+        except Exception as e:
+            logger.exception(f"Error fetching exchange rate: {e}")
+
     def _create_app_icon(self) -> QIcon:
         """Load the branded app icon from the .ico file.
 
@@ -2256,7 +2328,7 @@ QDialog {{
         """Format market cap value and return category.
 
         Args:
-            market_cap: Market cap in millions
+            market_cap: Market cap in millions (USD)
 
         Returns:
             Tuple of (formatted string, category)
@@ -2264,17 +2336,20 @@ QDialog {{
         if market_cap <= 0:
             return ("--", "")
 
-        # market_cap is already in millions from Finnhub
+        # Use currency formatter for display
+        cap_str = self.currency_formatter.format_market_cap(market_cap)
+
+        # Determine category based on USD value (categories are size-based, not currency-based)
         if market_cap >= 200000:  # $200B+
-            return (f"${market_cap / 1000:.0f}B", "Mega")
+            return (cap_str, "Mega")
         elif market_cap >= 10000:  # $10B+
-            return (f"${market_cap / 1000:.1f}B", "Large")
+            return (cap_str, "Large")
         elif market_cap >= 2000:  # $2B+
-            return (f"${market_cap / 1000:.1f}B", "Mid")
+            return (cap_str, "Mid")
         elif market_cap >= 300:  # $300M+
-            return (f"${market_cap:.0f}M", "Small")
+            return (cap_str, "Small")
         else:
-            return (f"${market_cap:.0f}M", "Micro")
+            return (cap_str, "Micro")
 
     def _load_logo(self, url: str, row: int, symbol: str) -> None:
         """Asynchronously load a company logo.
@@ -2566,14 +2641,14 @@ QDialog {{
 
             # Column 7: High threshold
             high = ticker.get("high_threshold", 0)
-            high_item = QTableWidgetItem(f"${high:.2f}")
+            high_item = QTableWidgetItem(self.currency_formatter.format_threshold(high))
             high_item.setFlags(high_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             high_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.ticker_table.setItem(row, 7, high_item)
 
             # Column 8: Low threshold
             low = ticker.get("low_threshold", 0)
-            low_item = QTableWidgetItem(f"${low:.2f}")
+            low_item = QTableWidgetItem(self.currency_formatter.format_threshold(low))
             low_item.setFlags(low_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             low_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             self.ticker_table.setItem(row, 8, low_item)
@@ -2894,7 +2969,7 @@ QDialog {{
 
         Args:
             symbol: Ticker symbol
-            price: Current price, or None if unavailable
+            price: Current price in USD, or None if unavailable
         """
         for row in range(self.ticker_table.rowCount()):
             item = self.ticker_table.item(row, 2)  # Column 2 = Symbol
@@ -2902,7 +2977,7 @@ QDialog {{
                 price_item = self.ticker_table.item(row, 9)  # Column 9 = Last Price
                 if price_item:
                     if price is not None:
-                        price_item.setText(f"${price:.2f}")
+                        price_item.setText(self.currency_formatter.format_price(price))
                     else:
                         price_item.setText("--")
                 break

@@ -22,6 +22,16 @@
     "dark": "Oscuro",
     "light": "Claro"
   },
+  "currency": {
+    "label": "Moneda",
+    "usd": "USD",
+    "mxn": "MXN",
+    "usd_name": "Dólar Estadounidense",
+    "mxn_name": "Peso Mexicano",
+    "rate_info": "1 USD = {rate} MXN",
+    "rate_unavailable": "Tipo de cambio no disponible",
+    "updating": "Actualizando tipo de cambio..."
+  },
   "tabs": {
     "profile": "Perfil",
     "settings": "Configuración",
@@ -92,9 +102,11 @@
     "alerts_whatsapp": "Alertas de WhatsApp",
     "alerts_whatsapp_help": "Requiere teléfono celular en la pestaña Perfil",
     "alerts_whatsapp_requires_phone": "Requiere teléfono celular en la pestaña Perfil",
-    "language_title": "Idioma",
+    "language_title": "Idioma y Moneda",
     "language": "Idioma de la Aplicación",
     "language_help": "Idioma de visualización de la aplicación",
+    "currency": "Moneda de Visualización",
+    "currency_help": "Mostrar precios en USD o Pesos Mexicanos",
     "provider_title": "Proveedor",
     "provider_name": "Nombre",
     "market_data_title": "Datos del Mercado",

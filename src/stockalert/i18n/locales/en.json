@@ -22,6 +22,16 @@
     "dark": "Dark",
     "light": "Light"
   },
+  "currency": {
+    "label": "Currency",
+    "usd": "USD",
+    "mxn": "MXN",
+    "usd_name": "US Dollar",
+    "mxn_name": "Mexican Peso",
+    "rate_info": "1 USD = {rate} MXN",
+    "rate_unavailable": "Exchange rate unavailable",
+    "updating": "Updating rate..."
+  },
   "tabs": {
     "profile": "Profile",
     "settings": "Settings",
@@ -92,9 +102,11 @@
     "alerts_whatsapp": "WhatsApp Alerts",
     "alerts_whatsapp_help": "Requires cell phone in Profile tab",
     "alerts_whatsapp_requires_phone": "Requires cell phone in Profile tab",
-    "language_title": "Language",
+    "language_title": "Language & Currency",
     "language": "Display Language",
     "language_help": "Application display language",
+    "currency": "Display Currency",
+    "currency_help": "Show prices in USD or Mexican Pesos",
     "provider_title": "Provider",
     "provider_name": "Name",
     "market_data_title": "Market Data",
