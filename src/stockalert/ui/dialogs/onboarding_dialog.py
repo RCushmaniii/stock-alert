@@ -32,7 +32,7 @@ class OnboardingDialog(QDialog):
         """
         super().__init__(parent)
         self.setWindowTitle(_("onboarding.title"))
-        self.setFixedSize(520, 480)
+        self.setFixedSize(520, 560)
         self.setModal(True)
         self._setup_ui()
 
@@ -70,27 +70,35 @@ class OnboardingDialog(QDialog):
         steps_layout = QVBoxLayout(steps_container)
         steps_layout.setSpacing(16)
 
-        # Step 1: Profile
+        # Step 1: Get API Key
         self._add_step(
             steps_layout,
             _("onboarding.step1_title"),
             _("onboarding.step1_desc"),
-            "👤"
+            "🔑"
         )
 
-        # Step 2: API Key
+        # Step 2: Configure Settings
         self._add_step(
             steps_layout,
             _("onboarding.step2_title"),
             _("onboarding.step2_desc"),
-            "🔑"
+            "⚙️"
         )
 
-        # Step 3: Add Stocks
+        # Step 3: Profile (for WhatsApp)
         self._add_step(
             steps_layout,
             _("onboarding.step3_title"),
             _("onboarding.step3_desc"),
+            "👤"
+        )
+
+        # Step 4: Add Stocks
+        self._add_step(
+            steps_layout,
+            _("onboarding.step4_title"),
+            _("onboarding.step4_desc"),
             "📈"
         )
 

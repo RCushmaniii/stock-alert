@@ -291,6 +291,7 @@ class ConfigManager:
         high_threshold: float,
         low_threshold: float,
         enabled: bool = True,
+        news_enabled: bool = False,
         logo: str = "",
         industry: str = "",
         market_cap: float = 0.0,
@@ -308,6 +309,7 @@ class ConfigManager:
             high_threshold: High price threshold
             low_threshold: Low price threshold
             enabled: Whether monitoring is enabled
+            news_enabled: Whether to include in news feed (max 5 for free tier)
             logo: Company logo URL
             industry: Finnhub industry classification
             market_cap: Market capitalization in millions
@@ -341,6 +343,7 @@ class ConfigManager:
                     "high_threshold": high_threshold,
                     "low_threshold": low_threshold,
                     "enabled": enabled,
+                    "news_enabled": news_enabled,
                     "logo": logo,
                     "industry": industry,
                     "market_cap": market_cap,

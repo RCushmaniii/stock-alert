@@ -307,6 +307,74 @@ class AlertManager:
             whatsapp_template_vars=whatsapp_vars,
         )
 
+    def send_consolidated_alert(self, alerts: list) -> None:
+        """Send a single consolidated notification for multiple alerts.
+
+        Args:
+            alerts: List of PendingAlert objects from monitor
+        """
+        if not self._notifications_enabled or not alerts:
+            return
+
+        # Get translated strings
+        app_title = self._get_text("alerts.app_title")
+        crossed_above = self._get_text("alerts.crossed_above")
+        crossed_below = self._get_text("alerts.crossed_below")
+
+        # Build consolidated message
+        if len(alerts) == 1:
+            # Single alert - use traditional format
+            alert = alerts[0]
+            direction = crossed_above if alert.alert_type == "high" else crossed_below
+            windows_message = (
+                f"{alert.symbol} {direction}\n"
+                f"Current: ${alert.price:.2f}  Threshold: ${alert.threshold:.2f}"
+            )
+            # Single WhatsApp message
+            whatsapp_vars = {
+                "1": alert.symbol,
+                "2": f"{alert.price:.2f}",
+                "3": "above" if alert.alert_type == "high" else "below",
+                "4": f"{alert.threshold:.2f}",
+            }
+            self._send_all_channels(
+                title=app_title,
+                message=windows_message,
+                symbol=alert.symbol,
+                whatsapp_template_vars=whatsapp_vars,
+            )
+        else:
+            # Multiple alerts - consolidated format
+            title = f"{len(alerts)} Price Alerts"
+
+            # Build Windows message
+            lines = []
+            for alert in alerts:
+                direction = "▲" if alert.alert_type == "high" else "▼"
+                lines.append(
+                    f"{direction} {alert.symbol}: ${alert.price:.2f} "
+                    f"({'above' if alert.alert_type == 'high' else 'below'} ${alert.threshold:.2f})"
+                )
+            windows_message = "\n".join(lines)
+
+            # Windows notification (consolidated)
+            if self.settings.windows_enabled:
+                self._send_windows_notification(title, windows_message)
+
+            # WhatsApp - send individual template messages (templates can't be combined)
+            if self.settings.whatsapp_enabled and self.settings.phone_number:
+                for alert in alerts:
+                    whatsapp_vars = {
+                        "1": alert.symbol,
+                        "2": f"{alert.price:.2f}",
+                        "3": "above" if alert.alert_type == "high" else "below",
+                        "4": f"{alert.threshold:.2f}",
+                    }
+                    self._send_whatsapp(
+                        f"*{app_title}*\n{alert.symbol} alert",
+                        template_vars=whatsapp_vars,
+                    )
+
     def send_info(self, title: str, message: str) -> None:
         """Send an informational notification.
 

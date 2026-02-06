@@ -788,6 +788,225 @@ print(repr(encoded))  # Use this as _EMBEDDED_KEY_DATA
 
 ---
 
+## PyQt6 Table Column Management
+
+### Adding Columns to QTableWidget
+
+**Problem**: When adding a new column to an existing table, you must update ALL column index references throughout the code.
+
+**Example**: Adding a "News" column (📰) after the Symbol column shifted all subsequent columns:
+
+| Column | Before | After |
+|--------|--------|-------|
+| Checkbox | 0 | 0 |
+| Logo | 1 | 1 |
+| Symbol | 2 | 2 |
+| **📰 News** | - | **3** (NEW) |
+| Name | 3 | 4 |
+| Industry | 4 | 5 |
+| Market Cap | 5 | 6 |
+| Low | 6 | 7 |
+| High | 7 | 8 |
+| Price | 8 | 9 |
+| Enabled | 9 | 10 |
+
+**Checklist when adding columns:**
+1. Update `setColumnCount()`
+2. Update header labels list
+3. Update ALL `setItem()` and `setCellWidget()` calls
+4. Update ALL column width settings (`setColumnWidth()`)
+5. Update any `item().text()` or `cellWidget()` index references
+6. Update `retranslate_ui()` if it sets headers
+
+### Widget Tooltips (QToolTip Styling)
+
+**Problem**: Default QToolTip can appear as a black rectangle with invisible text in dark themes.
+
+**Solution**: Explicitly style QToolTip in the widget's stylesheet:
+
+```python
+checkbox_container.setStyleSheet("""
+    QWidget { background: transparent; }
+    QToolTip {
+        background-color: #333333;
+        color: #FFFFFF;
+        border: 1px solid #555555;
+        padding: 4px;
+    }
+""")
+checkbox.setToolTip(_("tickers.news_enabled_help"))
+```
+
+**Important**: The QToolTip style must be on the widget that has the tooltip, or a parent container. It won't inherit from global app styles in all cases.
+
+---
+
+## WhatsApp Business API Quality
+
+### Delivery vs API Success - CRITICAL
+
+**Problem**: Twilio API can return `success: true` and a `message_sid` even when the message will NOT be delivered.
+
+**Why this happens:**
+- Twilio accepts the message into their queue (API success)
+- Meta/WhatsApp later decides whether to deliver it
+- Delivery depends on: template approval status, user quality rating, rate limits
+
+**What to check when messages aren't delivered but API shows success:**
+
+1. **Template status** in Twilio Console → Messaging → Content Templates
+   - Must show "Approved" status
+   - "Pending" templates won't deliver
+
+2. **WhatsApp Business Quality Rating**
+   - Check Twilio Console → Phone Numbers → WhatsApp Senders
+   - Low quality = throttled or blocked delivery
+
+3. **24-hour session window**
+   - Templates can be sent anytime
+   - Freeform messages ONLY work if user messaged you in last 24 hours
+
+4. **Phone number format**
+   - Must include country code (e.g., +1 for US, +52 for Mexico)
+   - Mexican numbers need +521 prefix for WhatsApp (see phone_utils.py)
+
+### Meta Quality Monitoring
+
+WhatsApp Business messages include an info icon (ⓘ) that users can tap to:
+- Mark as "Not interested"
+- Report as spam
+- Block the sender
+
+**Impact of negative feedback:**
+- Lowers your quality rating
+- Can cause: slower delivery, silent failures, account restrictions
+- No notification when this happens - messages just stop delivering
+
+**Mitigation strategies:**
+1. Use reasonable alert thresholds to minimize notification frequency
+2. Implement cooldown periods (Settings) to prevent alert flooding
+3. Warn users about WhatsApp quality in onboarding/help
+4. Always have Windows notifications as backup
+
+### Enhanced Logging for Debugging
+
+Added detailed logging for WhatsApp delivery debugging:
+
+```python
+# In TwilioService
+logger.info(
+    f"WhatsApp message sent - SID: {msg_sid}, Status: {msg_status}, "
+    f"Error Code: {error_code}, Error Message: {error_msg}"
+)
+
+# Backend response includes:
+{
+    'success': True,
+    'message_sid': 'SMxxxxx',
+    'status': 'queued',  # or 'sent', 'delivered', 'failed'
+    'error_code': None,   # Twilio error code if any
+    'error_message': None # Twilio error message if any
+}
+```
+
+---
+
+## Consolidated Notifications Pattern
+
+### Problem
+
+Sending individual notifications for each ticker that crosses a threshold creates notification spam, especially when multiple stocks move simultaneously.
+
+### Solution
+
+Collect all alerts during a check cycle, then send ONE consolidated notification:
+
+```python
+# In monitor.py
+@dataclass
+class PendingAlert:
+    """A pending alert to be sent in consolidated notification."""
+    symbol: str
+    name: str
+    price: float
+    threshold: float
+    alert_type: str  # "high" or "low"
+
+def _check_all_tickers(self) -> None:
+    """Check prices for all enabled tickers and send consolidated alerts."""
+    pending_alerts: list[PendingAlert] = []
+
+    for symbol, state in self._tickers.items():
+        alert = self._check_ticker(state)
+        if alert:
+            pending_alerts.append(alert)
+
+    # Send ONE notification for all alerts
+    if pending_alerts:
+        self._send_consolidated_alerts(pending_alerts)
+```
+
+### Alert Manager Consolidated Format
+
+```python
+# In alert_manager.py
+def send_consolidated_alert(self, alerts: list) -> None:
+    if len(alerts) == 1:
+        # Single alert - traditional detailed format
+        alert = alerts[0]
+        title = f"{alert.symbol} {'High' if alert.alert_type == 'high' else 'Low'} Alert"
+        message = f"{alert.name}: ${alert.price:.2f} (threshold: ${alert.threshold:.2f})"
+    else:
+        # Multiple alerts - consolidated summary
+        title = f"{len(alerts)} Price Alerts"
+        lines = []
+        for alert in alerts:
+            direction = "↑" if alert.alert_type == "high" else "↓"
+            lines.append(f"{direction} {alert.symbol}: ${alert.price:.2f}")
+        message = "\n".join(lines)
+
+    self._send_windows_notification(title, message)
+    if self._whatsapp_enabled:
+        self._send_whatsapp_notification(alerts)
+```
+
+---
+
+## Onboarding Dialog
+
+### Reset Flag for Testing
+
+To trigger the onboarding dialog on next launch:
+
+```json
+// In config.json
+{
+  "onboarding_completed": false
+}
+```
+
+Or programmatically:
+```python
+config_manager.set("onboarding_completed", False, save=True)
+```
+
+### Content Guidelines
+
+Onboarding should be:
+1. **Specific**: Step-by-step with exact URLs and button names
+2. **Minimal**: Only essential setup steps (4 steps max)
+3. **Honest**: Include warnings about limitations (e.g., WhatsApp quality issues)
+
+Example structure:
+- Step 1: Get Finnhub API key (with exact URL)
+- Step 2: Configure Settings (paste key, test connection)
+- Step 3: Set up Profile (for WhatsApp - phone with country code)
+- Step 4: Add stocks to monitor
+
+Include a warning tip about WhatsApp quality monitoring to set expectations.
+
+---
+
 ## Quick Reference
 
 ### Build & Run (Development)

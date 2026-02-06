@@ -203,7 +203,8 @@ class MainWindow(QMainWindow):
         header_inner.setObjectName("headerInner")
         header_inner.setFixedWidth(self.CONTENT_MAX_WIDTH)
         header_layout = QHBoxLayout(header_inner)
-        header_layout.setContentsMargins(0, 0, 0, 0)
+        # Match horizontal padding with body content
+        header_layout.setContentsMargins(self.CONTENT_PADDING, 0, self.CONTENT_PADDING, 0)
 
         # Logo / App name
         logo_label = QLabel("AI StockAlert")
@@ -271,7 +272,8 @@ class MainWindow(QMainWindow):
         footer_inner.setObjectName("footerInner")
         footer_inner.setFixedWidth(self.CONTENT_MAX_WIDTH)
         footer_layout = QHBoxLayout(footer_inner)
-        footer_layout.setContentsMargins(0, 0, 0, 0)
+        # Match horizontal padding with body content
+        footer_layout.setContentsMargins(self.CONTENT_PADDING, 0, self.CONTENT_PADDING, 0)
 
         # Copyright
         self.copyright_label = QLabel(_("about.copyright"))
@@ -367,12 +369,13 @@ class MainWindow(QMainWindow):
         # Ticker table with checkbox column
         self.ticker_table = QTableWidget()
         self.ticker_table.setObjectName("tickerTable")
-        self.ticker_table.setColumnCount(10)
+        self.ticker_table.setColumnCount(11)
 
         self.ticker_table.setHorizontalHeaderLabels([
             "",  # Checkbox column
             "",  # Logo column
             _("tickers.symbol"),
+            "📰",  # News column
             _("tickers.name"),
             _("tickers.industry"),
             _("tickers.market_cap"),
@@ -390,13 +393,15 @@ class MainWindow(QMainWindow):
             header.setSectionResizeMode(1, QHeaderView.ResizeMode.Fixed)  # Logo
             self.ticker_table.setColumnWidth(1, 45)
             header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Symbol
-            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)  # Name
-            header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Industry
-            header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Market Cap
-            header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # High
-            header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)  # Low
-            header.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)  # Price
-            header.setSectionResizeMode(9, QHeaderView.ResizeMode.ResizeToContents)  # Enabled
+            header.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)  # News
+            self.ticker_table.setColumnWidth(3, 45)
+            header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)  # Name
+            header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Industry
+            header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # Market Cap
+            header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)  # High
+            header.setSectionResizeMode(8, QHeaderView.ResizeMode.ResizeToContents)  # Low
+            header.setSectionResizeMode(9, QHeaderView.ResizeMode.ResizeToContents)  # Price
+            header.setSectionResizeMode(10, QHeaderView.ResizeMode.ResizeToContents)  # Enabled
 
             # Set the first column header to have a clickable select all indicator
             header_item = self.ticker_table.horizontalHeaderItem(0)
@@ -511,6 +516,50 @@ class MainWindow(QMainWindow):
         self._update_action_buttons()
         self._update_select_all_header()
 
+    def _on_news_checkbox_changed(self, symbol: str, state: int) -> None:
+        """Handle news checkbox state change for a ticker.
+
+        Args:
+            symbol: Ticker symbol
+            state: Qt checkbox state (0=unchecked, 2=checked)
+        """
+        from stockalert.core.tier_limits import get_max_news_tickers
+
+        news_enabled = state == 2  # Qt.CheckState.Checked
+
+        # Count current news-enabled tickers
+        tickers = self.config_manager.get_tickers()
+        current_news_count = sum(1 for t in tickers if t.get("news_enabled", False))
+        max_news = get_max_news_tickers()
+
+        # If trying to enable and at limit, block it
+        if news_enabled and current_news_count >= max_news:
+            # Find the checkbox that was just clicked and uncheck it
+            for row in range(self.ticker_table.rowCount()):
+                symbol_item = self.ticker_table.item(row, 2)
+                if symbol_item and symbol_item.text() == symbol:
+                    news_widget = self.ticker_table.cellWidget(row, 3)
+                    if news_widget:
+                        checkbox = news_widget.findChild(QCheckBox)
+                        if checkbox:
+                            checkbox.blockSignals(True)
+                            checkbox.setChecked(False)
+                            checkbox.blockSignals(False)
+                    break
+
+            # Show limit message
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self,
+                _("tickers.news"),
+                _("tickers.news_limit_reached", max=max_news),
+            )
+            return
+
+        # Update the ticker config
+        self.config_manager.update_ticker(symbol, news_enabled=news_enabled)
+        logger.info(f"Updated news_enabled for {symbol}: {news_enabled}")
+
     def _create_help_tab(self) -> QWidget:
         """Create the help tab with instructions and tips."""
         widget = QWidget()
@@ -561,6 +610,16 @@ class MainWindow(QMainWindow):
         alerts_content.setWordWrap(True)
         alerts_content.setObjectName("helpContent")
         layout.addWidget(alerts_content)
+
+        # WhatsApp Guidelines section
+        whatsapp_help = QLabel(_("help.whatsapp_title"))
+        whatsapp_help.setObjectName("helpSectionTitle")
+        layout.addWidget(whatsapp_help)
+
+        whatsapp_content = QLabel(_("help.whatsapp_content"))
+        whatsapp_content.setWordWrap(True)
+        whatsapp_content.setObjectName("helpContent")
+        layout.addWidget(whatsapp_content)
 
         # Background Service section
         service_help = QLabel(_("help.service_title"))
@@ -2434,22 +2493,66 @@ QDialog {{
             symbol_item.setFlags(symbol_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.ticker_table.setItem(row, 2, symbol_item)
 
-            # Column 3: Name (truncate long names, show full in tooltip)
+            # Column 3: News checkbox
+            news_widget = QWidget()
+            news_widget.setStyleSheet("background-color: transparent;")
+            news_layout = QHBoxLayout(news_widget)
+            news_layout.setContentsMargins(0, 0, 0, 0)
+            news_layout.addStretch()
+            news_checkbox = QCheckBox()
+            news_checkbox.setObjectName("newsCheckbox")
+            news_checkbox.setFixedSize(18, 18)
+            news_checkbox.setChecked(ticker.get("news_enabled", False))
+            news_checkbox.setToolTip(_("tickers.news_enabled_help"))
+            news_checkbox.setStyleSheet("""
+                QCheckBox {
+                    spacing: 0px;
+                    background-color: transparent;
+                }
+                QCheckBox::indicator {
+                    width: 16px;
+                    height: 16px;
+                    border: 2px solid #555555;
+                    border-radius: 0px;
+                    background-color: #1A1A1A;
+                }
+                QCheckBox::indicator:checked {
+                    background-color: #4A90D9;
+                    border-color: #4A90D9;
+                }
+                QCheckBox::indicator:hover {
+                    border-color: #4A90D9;
+                }
+                QToolTip {
+                    background-color: #333333;
+                    color: #FFFFFF;
+                    border: 1px solid #555555;
+                    padding: 4px;
+                }
+            """)
+            news_checkbox.stateChanged.connect(
+                lambda state, s=symbol: self._on_news_checkbox_changed(s, state)
+            )
+            news_layout.addWidget(news_checkbox)
+            news_layout.addStretch()
+            self.ticker_table.setCellWidget(row, 3, news_widget)
+
+            # Column 4: Name (truncate long names, show full in tooltip)
             full_name = ticker.get("name", "")
             display_name = self._truncate_text(full_name, max_length=30)
             name_item = QTableWidgetItem(display_name)
             name_item.setFlags(name_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             if len(full_name) > 30:
                 name_item.setToolTip(full_name)
-            self.ticker_table.setItem(row, 3, name_item)
+            self.ticker_table.setItem(row, 4, name_item)
 
-            # Column 4: Industry
+            # Column 5: Industry
             industry = ticker.get("industry", "")
             industry_item = QTableWidgetItem(industry if industry else "--")
             industry_item.setFlags(industry_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            self.ticker_table.setItem(row, 4, industry_item)
+            self.ticker_table.setItem(row, 5, industry_item)
 
-            # Column 5: Market Cap with category badge
+            # Column 6: Market Cap with category badge
             market_cap = ticker.get("market_cap", 0)
             cap_str, cap_category = self._format_market_cap(market_cap)
             if cap_category:
@@ -2459,34 +2562,34 @@ QDialog {{
             cap_item = QTableWidgetItem(cap_display)
             cap_item.setFlags(cap_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             cap_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.ticker_table.setItem(row, 5, cap_item)
+            self.ticker_table.setItem(row, 6, cap_item)
 
-            # Column 6: High threshold
+            # Column 7: High threshold
             high = ticker.get("high_threshold", 0)
             high_item = QTableWidgetItem(f"${high:.2f}")
             high_item.setFlags(high_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             high_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.ticker_table.setItem(row, 6, high_item)
+            self.ticker_table.setItem(row, 7, high_item)
 
-            # Column 7: Low threshold
+            # Column 8: Low threshold
             low = ticker.get("low_threshold", 0)
             low_item = QTableWidgetItem(f"${low:.2f}")
             low_item.setFlags(low_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             low_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.ticker_table.setItem(row, 7, low_item)
+            self.ticker_table.setItem(row, 8, low_item)
 
-            # Column 8: Last price (placeholder)
+            # Column 9: Last price (placeholder)
             price_item = QTableWidgetItem("--")
             price_item.setFlags(price_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             price_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.ticker_table.setItem(row, 8, price_item)
+            self.ticker_table.setItem(row, 9, price_item)
 
-            # Column 9: Enabled
+            # Column 10: Enabled
             enabled = ticker.get("enabled", True)
             enabled_item = QTableWidgetItem("✓" if enabled else "✗")
             enabled_item.setFlags(enabled_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
             enabled_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            self.ticker_table.setItem(row, 9, enabled_item)
+            self.ticker_table.setItem(row, 10, enabled_item)
 
         # Update button states and header
         self._update_action_buttons()
@@ -2761,11 +2864,12 @@ QDialog {{
         # Update tickers tab title
         self.tickers_title.setText(_("tickers.title"))
 
-        # Update ticker table headers (10 columns)
+        # Update ticker table headers (11 columns)
         self.ticker_table.setHorizontalHeaderLabels([
             "",  # Checkbox column
             "",  # Logo column
             _("tickers.symbol"),
+            "📰",  # News column
             _("tickers.name"),
             _("tickers.industry"),
             _("tickers.market_cap"),
@@ -2795,7 +2899,7 @@ QDialog {{
         for row in range(self.ticker_table.rowCount()):
             item = self.ticker_table.item(row, 2)  # Column 2 = Symbol
             if item and item.text() == symbol:
-                price_item = self.ticker_table.item(row, 8)  # Column 8 = Last Price
+                price_item = self.ticker_table.item(row, 9)  # Column 9 = Last Price
                 if price_item:
                     if price is not None:
                         price_item.setText(f"${price:.2f}")

@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from stockalert.core.tier_limits import can_add_ticker, get_max_tickers
+from stockalert.core.tier_limits import can_add_ticker, get_max_news_tickers, get_max_tickers
 from stockalert.i18n.translator import _
 
 if TYPE_CHECKING:
@@ -117,6 +117,26 @@ class TickerDialog(QDialog):
         self.enabled_check = QCheckBox()
         self.enabled_check.setChecked(True)
         form_layout.addRow(_("tickers.enabled") + ":", self.enabled_check)
+
+        # News enabled with limit indicator
+        news_layout = QHBoxLayout()
+        self.news_check = QCheckBox()
+        self.news_check.setChecked(False)
+        news_layout.addWidget(self.news_check)
+
+        # Count current news-enabled tickers
+        tickers = self.config_manager.get_tickers()
+        current_news_count = sum(1 for t in tickers if t.get("news_enabled", False))
+        # If editing, exclude this ticker from the count
+        if self.is_edit and self.ticker and self.ticker.get("news_enabled", False):
+            current_news_count -= 1
+        max_news = get_max_news_tickers()
+
+        self.news_limit_label = QLabel(f"({current_news_count}/{max_news})")
+        self.news_limit_label.setStyleSheet("color: #888888; font-size: 11px; margin-left: 8px;")
+        news_layout.addWidget(self.news_limit_label)
+        news_layout.addStretch()
+        form_layout.addRow(_("tickers.news_enabled") + ":", news_layout)
 
         # Current price (shown for both add and edit)
         price_layout = QHBoxLayout()
@@ -259,6 +279,7 @@ class TickerDialog(QDialog):
         self.high_spin.setValue(ticker.get("high_threshold", 0.0))
         self.low_spin.setValue(ticker.get("low_threshold", 0.0))
         self.enabled_check.setChecked(ticker.get("enabled", True))
+        self.news_check.setChecked(ticker.get("news_enabled", False))
 
     def _on_symbol_changed(self, text: str) -> None:
         """Handle symbol text change - uppercase it."""
@@ -493,6 +514,23 @@ class TickerDialog(QDialog):
             high = self.high_spin.value()
             low = self.low_spin.value()
             enabled = self.enabled_check.isChecked()
+            news_enabled = self.news_check.isChecked()
+
+            # Validate news limit if trying to enable news
+            if news_enabled:
+                tickers = self.config_manager.get_tickers()
+                current_news_count = sum(1 for t in tickers if t.get("news_enabled", False))
+                # If editing, exclude this ticker from the count
+                if self.is_edit and self.ticker and self.ticker.get("news_enabled", False):
+                    current_news_count -= 1
+                max_news = get_max_news_tickers()
+                if current_news_count >= max_news:
+                    QMessageBox.warning(
+                        self,
+                        _("tickers.news"),
+                        _("tickers.news_limit_reached", max=max_news),
+                    )
+                    return
 
             if self.is_edit:
                 # Update existing ticker
@@ -502,6 +540,7 @@ class TickerDialog(QDialog):
                     high_threshold=high,
                     low_threshold=low,
                     enabled=enabled,
+                    news_enabled=news_enabled,
                 )
             else:
                 # Add new ticker with profile data if available
@@ -512,6 +551,7 @@ class TickerDialog(QDialog):
                     high_threshold=high,
                     low_threshold=low,
                     enabled=enabled,
+                    news_enabled=news_enabled,
                     logo=profile.get("logo", ""),
                     industry=profile.get("finnhubIndustry", ""),
                     market_cap=profile.get("marketCapitalization", 0.0),

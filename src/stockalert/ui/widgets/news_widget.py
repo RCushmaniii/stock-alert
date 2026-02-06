@@ -66,7 +66,7 @@ class NewsFetcher(QThread):
                 from_date = week_ago.strftime("%Y-%m-%d")
                 to_date = today.strftime("%Y-%m-%d")
 
-                for symbol in self.symbols[:5]:  # Limit to 5 to conserve API calls
+                for symbol in self.symbols:  # Only news-enabled tickers passed in
                     news = provider.get_company_news(symbol, from_date, to_date)
                     for article in news[:3]:  # Top 3 per symbol
                         article["_symbol"] = symbol
@@ -368,11 +368,11 @@ class NewsWidget(QWidget):
         self._ticker_names: dict[str, str] = {}
 
         if filter_value == "stocks":
-            # Fetch news for monitored stocks
+            # Fetch news only for tickers with news_enabled=True
             tickers = self.config_manager.get_tickers()
             symbols = []
             for t in tickers:
-                if t.get("enabled", True):
+                if t.get("news_enabled", False):
                     symbol = t["symbol"]
                     symbols.append(symbol)
                     self._ticker_names[symbol] = t.get("name", symbol)

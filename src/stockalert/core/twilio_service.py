@@ -177,10 +177,26 @@ class TwilioService:
             result = self._call_api(VERCEL_API_URL, payload)
 
             if result.get("success"):
-                logger.info(f"WhatsApp message sent successfully via API")
+                msg_sid = result.get("message_sid", "unknown")
+                msg_status = result.get("status", "unknown")
+                error_code = result.get("error_code")
+                error_msg = result.get("error_message")
+
+                if error_code or error_msg:
+                    logger.warning(
+                        f"WhatsApp sent but has errors - SID: {msg_sid}, "
+                        f"Status: {msg_status}, ErrorCode: {error_code}, ErrorMsg: {error_msg}"
+                    )
+                else:
+                    logger.info(
+                        f"WhatsApp message sent successfully - SID: {msg_sid}, Status: {msg_status}"
+                    )
                 return True
             else:
-                logger.error(f"WhatsApp failed: {result.get('error')}")
+                logger.error(
+                    f"WhatsApp failed: {result.get('error')} "
+                    f"(type: {result.get('error_type', 'unknown')})"
+                )
                 return False
 
         except Exception as e:

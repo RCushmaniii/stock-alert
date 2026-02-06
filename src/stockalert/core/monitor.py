@@ -39,6 +39,17 @@ class TickerState:
 
 
 @dataclass
+class PendingAlert:
+    """A pending alert to be sent in consolidated notification."""
+
+    symbol: str
+    name: str
+    price: float
+    threshold: float
+    alert_type: str  # "high" or "low"
+
+
+@dataclass
 class MonitorStats:
     """Statistics for the monitoring session."""
 
@@ -183,7 +194,9 @@ class StockMonitor:
             elapsed += chunk
 
     def _check_all_tickers(self) -> None:
-        """Check prices for all enabled tickers."""
+        """Check prices for all enabled tickers and send consolidated alerts."""
+        pending_alerts: list[PendingAlert] = []
+
         for symbol, state in self._tickers.items():
             if not self._running or self._stop_event.is_set():
                 break
@@ -191,13 +204,44 @@ class StockMonitor:
             if not state.enabled:
                 continue
 
-            self._check_ticker(state)
+            alert = self._check_ticker(state)
+            if alert:
+                pending_alerts.append(alert)
 
-    def _check_ticker(self, state: TickerState) -> None:
-        """Check a single ticker's price against thresholds."""
+        # Send consolidated notification if there are any alerts
+        if pending_alerts:
+            self._send_consolidated_alerts(pending_alerts)
+
+    def _send_consolidated_alerts(self, alerts: list[PendingAlert]) -> None:
+        """Send a single consolidated notification for all alerts.
+
+        Args:
+            alerts: List of pending alerts to consolidate
+        """
+        if not alerts:
+            return
+
+        # Update stats
+        self._stats.alerts_sent += len(alerts)
+
+        # Update last_alert_time for all alerted tickers
+        current_time = time.time()
+        for alert in alerts:
+            if alert.symbol in self._tickers:
+                self._tickers[alert.symbol].last_alert_time = current_time
+
+        # Send consolidated alert
+        self.alert_manager.send_consolidated_alert(alerts)
+
+    def _check_ticker(self, state: TickerState) -> PendingAlert | None:
+        """Check a single ticker's price against thresholds.
+
+        Returns:
+            PendingAlert if threshold crossed, None otherwise
+        """
         # Skip if already auto-disabled
         if state.auto_disabled:
-            return
+            return None
 
         try:
             price = self.provider.get_price(state.symbol)
@@ -208,7 +252,7 @@ class StockMonitor:
                 if state.consecutive_failures >= self.MAX_CONSECUTIVE_FAILURES:
                     # Auto-disable the ticker and notify user
                     self._auto_disable_ticker(state)
-                return
+                return None
 
             # Reset failure counter on success
             state.consecutive_failures = 0
@@ -216,12 +260,13 @@ class StockMonitor:
 
             logger.debug(f"{state.symbol}: ${price:.2f}")
 
-            # Check thresholds
-            self._check_thresholds(state, price)
+            # Check thresholds and return alert if crossed
+            return self._check_thresholds(state, price)
 
         except Exception as e:
             logger.exception(f"Error checking {state.symbol}: {e}")
             self._stats.api_errors += 1
+            return None
 
     def _auto_disable_ticker(self, state: TickerState) -> None:
         """Auto-disable a ticker after repeated failures.
@@ -260,8 +305,12 @@ class StockMonitor:
         except Exception as e:
             logger.error(f"Failed to send auto-disable notification: {e}")
 
-    def _check_thresholds(self, state: TickerState, price: float) -> None:
-        """Check if price crosses any thresholds."""
+    def _check_thresholds(self, state: TickerState, price: float) -> PendingAlert | None:
+        """Check if price crosses any thresholds.
+
+        Returns:
+            PendingAlert if threshold crossed, None otherwise
+        """
         # Skip alerting on first check to avoid false alerts from price gaps
         # (e.g., stock already above threshold when first added)
         if not state.first_check_done:
@@ -276,7 +325,7 @@ class StockMonitor:
                     f"{state.symbol}: Skipping initial low alert "
                     f"(${price:.2f} <= ${state.low_threshold:.2f}) - price gap protection"
                 )
-            return
+            return None
 
         cooldown = self.config_manager.get("settings.cooldown", 300)
 
@@ -284,35 +333,35 @@ class StockMonitor:
         if state.last_alert_time is not None:
             time_since_alert = time.time() - state.last_alert_time
             if time_since_alert < cooldown:
-                return
+                return None
 
         # Check high threshold
         if price >= state.high_threshold:
             logger.info(
                 f"{state.symbol} HIGH ALERT: ${price:.2f} >= ${state.high_threshold:.2f}"
             )
-            self.alert_manager.send_high_alert(
+            return PendingAlert(
                 symbol=state.symbol,
                 name=state.name,
                 price=price,
                 threshold=state.high_threshold,
+                alert_type="high",
             )
-            state.last_alert_time = time.time()
-            self._stats.alerts_sent += 1
 
         # Check low threshold
         elif price <= state.low_threshold:
             logger.info(
                 f"{state.symbol} LOW ALERT: ${price:.2f} <= ${state.low_threshold:.2f}"
             )
-            self.alert_manager.send_low_alert(
+            return PendingAlert(
                 symbol=state.symbol,
                 name=state.name,
                 price=price,
                 threshold=state.low_threshold,
+                alert_type="low",
             )
-            state.last_alert_time = time.time()
-            self._stats.alerts_sent += 1
+
+        return None
 
     @property
     def is_running(self) -> bool:

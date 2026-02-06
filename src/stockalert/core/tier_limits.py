@@ -59,6 +59,15 @@ def get_news_ticker_limit() -> int:
     return FREE_TIER_NEWS_TICKERS
 
 
+def get_max_news_tickers() -> int:
+    """Get maximum tickers allowed for news feed (alias for get_news_ticker_limit).
+
+    Returns:
+        Maximum number of tickers for news fetching
+    """
+    return FREE_TIER_NEWS_TICKERS
+
+
 def can_add_ticker(current_count: int) -> bool:
     """Check if another ticker can be added.
 

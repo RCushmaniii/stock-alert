@@ -61,13 +61,15 @@
   "help": {
     "title": "Help & Tips",
     "getting_started": "Getting Started",
-    "getting_started_content": "AI StockAlert monitors your selected stocks in real-time and sends alerts via Windows notifications and WhatsApp when prices cross your defined thresholds.\n\n1. Enter your Finnhub API key in Settings (get free at finnhub.io)\n2. Add stocks to monitor in the Tickers tab\n3. Set high and low price thresholds for each stock\n4. Configure your alert channels (Windows, WhatsApp)\n5. Enable the Background Service in Settings to receive alerts 24/7",
+    "getting_started_content": "AI StockAlert monitors your selected stocks in real-time and sends alerts via Windows notifications and WhatsApp when prices cross your defined thresholds.\n\nStep 1: Get Your Finnhub API Key\n• Visit finnhub.io/register and create a free account\n• Enter your email address and create a password\n• After signing up, go to Dashboard to find your API key\n\nStep 2: Configure Settings\n• Go to the Settings tab in this app\n• Click 'Paste' to paste your API key from clipboard\n• Click 'Test Connection' to verify it works\n\nStep 3: Set Up Your Profile (for WhatsApp)\n• Go to the Profile tab\n• Enter your phone number with country code (e.g., +1 for US, +52 for Mexico)\n• This is required for WhatsApp alerts\n\nStep 4: Add Stocks to Monitor\n• Go to the Tickers tab and click 'Add Ticker'\n• Enter stock symbols (e.g., AAPL, MSFT, GOOGL)\n• Set your high and low price thresholds",
     "settings_tips": "Settings Tips",
     "settings_tips_content": "• API Key: Get your free Finnhub API key at finnhub.io/dashboard. Required for stock data.\n\n• Check Interval: How often the app fetches new prices. Free tier minimum is 90 seconds.\n\n• Cooldown Period: Prevents repeated alerts for the same stock. After an alert fires, you won't get another for that stock until the cooldown expires. Recommended: 5-15 minutes.\n\n• Alert Channels: Choose Windows notifications and/or WhatsApp. Use the Test buttons to verify they work.",
     "tickers_title": "Managing Tickers",
     "tickers_content": "• Add Ticker: Enter the stock symbol (e.g., AAPL, MSFT, GOOGL) and set your price thresholds.\n\n• High Threshold: You'll be alerted when the price rises ABOVE this value.\n\n• Low Threshold: You'll be alerted when the price falls BELOW this value.\n\n• Toggle Enabled: Temporarily disable monitoring for a stock without deleting it.\n\n• Free Tier Limit: Up to 15 tickers can be monitored.",
     "alerts_title": "Understanding Alerts",
-    "alerts_content": "• Windows Alerts: Appear as notifications in the bottom-right corner. Click to open a price chart.\n\n• WhatsApp Alerts: Requires your phone number in the Profile tab and Twilio configuration.\n\n• The app respects market hours - alerts only fire during US market hours (9:30 AM - 4:00 PM ET, Mon-Fri).",
+    "alerts_content": "• Windows Alerts: Appear as notifications in the bottom-right corner. Click to open a price chart. These are reliable and unlimited.\n\n• WhatsApp Alerts: Requires your phone number in the Profile tab. Messages may include a feedback icon that Meta uses to monitor quality.\n\n• The app respects market hours - alerts only fire during US market hours (9:30 AM - 4:00 PM ET, Mon-Fri).",
+    "whatsapp_title": "WhatsApp Alert Guidelines",
+    "whatsapp_content": "WhatsApp Business messaging is monitored by Meta for quality control:\n\n• Each message has a feedback icon (ⓘ) that users can tap to rate the message.\n\n• If users click 'Not interested' or block the number, your delivery quality rating drops.\n\n• Low ratings can cause: slower delivery, message failures, or account restrictions.\n\n• To avoid issues: Set reasonable alert thresholds to minimize unnecessary notifications. Use cooldown periods (Settings) to prevent alert flooding.\n\n• If WhatsApp becomes unreliable, Windows notifications are always available as a backup.\n\n• You can disable WhatsApp alerts anytime in Settings without affecting Windows notifications.",
     "service_title": "Background Service",
     "service_content": "• The Background Service allows StockAlert to monitor prices and send alerts even when the GUI is closed.\n\n• Go to Settings > Background Service and click 'Start Service' to enable it.\n\n• The service runs silently in the background until you stop it or restart your computer.\n\n• Your settings and ticker configuration are automatically picked up by the service when you save changes."
   },
@@ -162,7 +164,12 @@
     "refreshing_profiles": "Refreshing...",
     "profiles_refreshed": "Profile data refreshed for {count} tickers",
     "limit_reached": "Free tier limit reached ({limit} tickers max). Upgrade for unlimited tickers.",
-    "ticker_count": "{current} of {max} tickers"
+    "ticker_count": "{current} of {max} tickers",
+    "news": "News",
+    "news_enabled": "Include in News",
+    "news_enabled_help": "Show news for this ticker in the News tab",
+    "news_slots_used": "{current} of {max} news slots used",
+    "news_limit_reached": "News limit reached (max {max} tickers for free tier)"
   },
   "alerts": {
     "app_title": "AI StockAlert",
@@ -262,15 +269,17 @@
   },
   "onboarding": {
     "title": "Welcome to StockAlert!",
-    "subtitle": "Let's get you set up in 3 easy steps:",
-    "step1_title": "1. Complete Your Profile",
-    "step1_desc": "Add your name, email, and phone number to receive personalized alerts via email and WhatsApp.",
-    "step2_title": "2. Add Your API Key",
-    "step2_desc": "Get a free Finnhub API key at finnhub.io/register and enter it in Settings. This enables real-time stock data.",
-    "step3_title": "3. Add Stocks to Monitor",
-    "step3_desc": "Go to the Tickers tab and add stocks you want to track. Set high/low price thresholds to trigger alerts.",
-    "tip_title": "Pro Tip:",
-    "tip_desc": "Enable 'Start with Windows' in Settings to receive alerts automatically when your computer starts!",
+    "subtitle": "Let's get you set up in 4 easy steps:",
+    "step1_title": "1. Get Your Free Finnhub API Key",
+    "step1_desc": "Visit finnhub.io/register and create an account using your email address and a password. After signing up, go to Dashboard to copy your API key.",
+    "step2_title": "2. Configure Settings",
+    "step2_desc": "Go to the Settings tab, paste your API key using the Paste button, then click 'Test Connection' to verify it works.",
+    "step3_title": "3. Add Your Profile (for WhatsApp)",
+    "step3_desc": "If you want WhatsApp alerts, go to the Profile tab and enter your phone number with country code (e.g., +1 for US, +52 for Mexico).",
+    "step4_title": "4. Add Stocks to Monitor",
+    "step4_desc": "Go to the Tickers tab and add stocks you want to track. Set high/low price thresholds to trigger alerts.",
+    "tip_title": "About WhatsApp Alerts:",
+    "tip_desc": "WhatsApp notifications are convenient but monitored by Meta for quality. If you receive too many alerts or mark them as spam, delivery may be affected. You can disable WhatsApp anytime in Settings and rely on Windows notifications instead.",
     "btn_get_started": "Get Started",
     "btn_skip": "Skip for Now"
   }

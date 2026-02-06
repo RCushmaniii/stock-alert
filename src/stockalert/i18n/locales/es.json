@@ -61,13 +61,15 @@
   "help": {
     "title": "Ayuda y Consejos",
     "getting_started": "Primeros Pasos",
-    "getting_started_content": "AI StockAlert monitorea tus acciones seleccionadas en tiempo real y envía alertas vía notificaciones de Windows y WhatsApp cuando los precios cruzan tus umbrales definidos.\n\n1. Ingresa tu clave API de Finnhub en Configuración (obtén una gratis en finnhub.io)\n2. Agrega acciones para monitorear en la pestaña Acciones\n3. Establece umbrales de precio alto y bajo para cada acción\n4. Configura tus canales de alerta (Windows, WhatsApp)\n5. Habilita el Servicio en Segundo Plano en Configuración para recibir alertas 24/7",
+    "getting_started_content": "AI StockAlert monitorea tus acciones seleccionadas en tiempo real y envía alertas vía notificaciones de Windows y WhatsApp cuando los precios cruzan tus umbrales definidos.\n\nPaso 1: Obtén Tu Clave API de Finnhub\n• Visita finnhub.io/register y crea una cuenta gratuita\n• Ingresa tu correo electrónico y crea una contraseña\n• Después de registrarte, ve al Dashboard para encontrar tu clave API\n\nPaso 2: Configura los Ajustes\n• Ve a la pestaña Configuración en esta app\n• Haz clic en 'Pegar' para pegar tu clave API del portapapeles\n• Haz clic en 'Probar Conexión' para verificar que funciona\n\nPaso 3: Configura Tu Perfil (para WhatsApp)\n• Ve a la pestaña Perfil\n• Ingresa tu número de teléfono con código de país (ej., +1 para EE.UU., +52 para México)\n• Esto es requerido para alertas de WhatsApp\n\nPaso 4: Agrega Acciones para Monitorear\n• Ve a la pestaña Acciones y haz clic en 'Agregar Acción'\n• Ingresa símbolos de acciones (ej., AAPL, MSFT, GOOGL)\n• Establece tus umbrales de precio alto y bajo",
     "settings_tips": "Consejos de Configuración",
     "settings_tips_content": "• Clave API: Obtén tu clave API gratuita de Finnhub en finnhub.io/dashboard. Requerida para datos de acciones.\n\n• Intervalo de Verificación: Con qué frecuencia la app obtiene nuevos precios. El mínimo del nivel gratuito es 90 segundos.\n\n• Período de Enfriamiento: Previene alertas repetidas para la misma acción. Después de que se activa una alerta, no recibirás otra para esa acción hasta que expire el enfriamiento. Recomendado: 5-15 minutos.\n\n• Canales de Alerta: Elige notificaciones de Windows y/o WhatsApp. Usa los botones de Probar para verificar que funcionen.",
     "tickers_title": "Gestión de Acciones",
     "tickers_content": "• Agregar Acción: Ingresa el símbolo de la acción (ej., AAPL, MSFT, GOOGL) y establece tus umbrales de precio.\n\n• Umbral Alto: Serás alertado cuando el precio suba POR ENCIMA de este valor.\n\n• Umbral Bajo: Serás alertado cuando el precio caiga POR DEBAJO de este valor.\n\n• Alternar Habilitado: Desactiva temporalmente el monitoreo de una acción sin eliminarla.\n\n• Límite del Nivel Gratuito: Se pueden monitorear hasta 15 acciones.",
     "alerts_title": "Entendiendo las Alertas",
-    "alerts_content": "• Alertas de Windows: Aparecen como notificaciones en la esquina inferior derecha. Haz clic para abrir un gráfico de precios.\n\n• Alertas de WhatsApp: Requiere tu número de teléfono en la pestaña Perfil y configuración de Twilio.\n\n• La app respeta el horario del mercado - las alertas solo se activan durante las horas del mercado de EE.UU. (9:30 AM - 4:00 PM ET, Lun-Vie).",
+    "alerts_content": "• Alertas de Windows: Aparecen como notificaciones en la esquina inferior derecha. Haz clic para abrir un gráfico de precios. Son confiables e ilimitadas.\n\n• Alertas de WhatsApp: Requiere tu número de teléfono en la pestaña Perfil. Los mensajes pueden incluir un icono de feedback que Meta usa para monitorear calidad.\n\n• La app respeta el horario del mercado - las alertas solo se activan durante las horas del mercado de EE.UU. (9:30 AM - 4:00 PM ET, Lun-Vie).",
+    "whatsapp_title": "Guía de Alertas de WhatsApp",
+    "whatsapp_content": "La mensajería de WhatsApp Business es monitoreada por Meta para control de calidad:\n\n• Cada mensaje tiene un icono de feedback (ⓘ) que los usuarios pueden tocar para calificar el mensaje.\n\n• Si los usuarios hacen clic en 'No me interesa' o bloquean el número, tu calificación de calidad baja.\n\n• Calificaciones bajas pueden causar: entrega más lenta, fallas de mensajes, o restricciones de cuenta.\n\n• Para evitar problemas: Establece umbrales de alerta razonables para minimizar notificaciones innecesarias. Usa períodos de enfriamiento (Configuración) para prevenir inundación de alertas.\n\n• Si WhatsApp se vuelve poco confiable, las notificaciones de Windows siempre están disponibles como respaldo.\n\n• Puedes desactivar alertas de WhatsApp en cualquier momento en Configuración sin afectar las notificaciones de Windows.",
     "service_title": "Servicio en Segundo Plano",
     "service_content": "• El Servicio en Segundo Plano permite que StockAlert monitoree precios y envíe alertas incluso cuando la GUI está cerrada.\n\n• Ve a Configuración > Servicio en Segundo Plano y haz clic en 'Iniciar Servicio' para habilitarlo.\n\n• El servicio se ejecuta silenciosamente en segundo plano hasta que lo detengas o reinicies tu computadora.\n\n• Tu configuración y acciones se recogen automáticamente por el servicio cuando guardas cambios."
   },
@@ -162,7 +164,12 @@
     "refreshing_profiles": "Actualizando...",
     "profiles_refreshed": "Datos de perfil actualizados para {count} acciones",
     "limit_reached": "Límite del nivel gratuito alcanzado ({limit} acciones máximo). Actualiza para acciones ilimitadas.",
-    "ticker_count": "{current} de {max} acciones"
+    "ticker_count": "{current} de {max} acciones",
+    "news": "Noticias",
+    "news_enabled": "Incluir en Noticias",
+    "news_enabled_help": "Mostrar noticias de esta acción en la pestaña Noticias",
+    "news_slots_used": "{current} de {max} espacios de noticias usados",
+    "news_limit_reached": "Límite de noticias alcanzado (máx {max} acciones para nivel gratuito)"
   },
   "alerts": {
     "app_title": "AI StockAlert",
@@ -262,15 +269,17 @@
   },
   "onboarding": {
     "title": "¡Bienvenido a StockAlert!",
-    "subtitle": "Vamos a configurarte en 3 sencillos pasos:",
-    "step1_title": "1. Completa Tu Perfil",
-    "step1_desc": "Agrega tu nombre, correo electrónico y número de teléfono para recibir alertas personalizadas por correo y WhatsApp.",
-    "step2_title": "2. Agrega Tu Clave API",
-    "step2_desc": "Obtén una clave API gratuita de Finnhub en finnhub.io/register e ingrésala en Configuración. Esto habilita datos de acciones en tiempo real.",
-    "step3_title": "3. Agrega Acciones para Monitorear",
-    "step3_desc": "Ve a la pestaña Acciones y agrega las acciones que deseas seguir. Establece umbrales de precio alto/bajo para activar alertas.",
-    "tip_title": "Consejo Pro:",
-    "tip_desc": "¡Habilita 'Iniciar con Windows' en Configuración para recibir alertas automáticamente cuando tu computadora inicie!",
+    "subtitle": "Vamos a configurarte en 4 sencillos pasos:",
+    "step1_title": "1. Obtén Tu Clave API de Finnhub",
+    "step1_desc": "Visita finnhub.io/register y crea una cuenta usando tu correo electrónico y una contraseña. Después de registrarte, ve al Dashboard para copiar tu clave API.",
+    "step2_title": "2. Configura los Ajustes",
+    "step2_desc": "Ve a la pestaña Configuración, pega tu clave API usando el botón Pegar, luego haz clic en 'Probar Conexión' para verificar que funciona.",
+    "step3_title": "3. Agrega Tu Perfil (para WhatsApp)",
+    "step3_desc": "Si deseas alertas de WhatsApp, ve a la pestaña Perfil e ingresa tu número de teléfono con código de país (ej., +1 para EE.UU., +52 para México).",
+    "step4_title": "4. Agrega Acciones para Monitorear",
+    "step4_desc": "Ve a la pestaña Acciones y agrega las acciones que deseas seguir. Establece umbrales de precio alto/bajo para activar alertas.",
+    "tip_title": "Sobre Alertas de WhatsApp:",
+    "tip_desc": "Las notificaciones de WhatsApp son convenientes pero monitoreadas por Meta para calidad. Si recibes demasiadas alertas o las marcas como spam, la entrega puede verse afectada. Puedes desactivar WhatsApp en cualquier momento en Configuración y usar notificaciones de Windows.",
     "btn_get_started": "Comenzar",
     "btn_skip": "Omitir por Ahora"
   }

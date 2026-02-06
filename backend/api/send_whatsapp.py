@@ -153,13 +153,18 @@ def send_whatsapp_message(to_number: str, message: str = None, template_data: di
 
         return {
             'success': True,
-            'message_sid': message_obj.sid
+            'message_sid': message_obj.sid,
+            'status': message_obj.status,
+            'to': to_whatsapp,
+            'error_code': message_obj.error_code,
+            'error_message': message_obj.error_message,
         }
 
     except Exception as e:
         return {
             'success': False,
-            'error': str(e)
+            'error': str(e),
+            'error_type': type(e).__name__,
         }
 
 
