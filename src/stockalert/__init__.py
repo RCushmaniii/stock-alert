@@ -7,7 +7,7 @@ and sends Windows toast notifications when configurable thresholds are breached.
 
 from __future__ import annotations
 
-__version__ = "4.0.0"
+__version__ = "4.1.0"
 __author__ = "Robert Cushman"
 __email__ = "rcushman@rcsoftware.com"
 

@@ -1110,4 +1110,80 @@ python setup_msi.py build_exe
 
 ---
 
-*Last updated: February 6, 2026*
+## WhatsApp Opt-In Flow
+
+### Why Opt-In Is Required
+
+WhatsApp Business API requires **explicit user consent** before sending business-initiated messages. Without opt-in:
+- Messages may be flagged as spam
+- Meta may throttle or block delivery
+- Account quality rating suffers
+
+### Implementation
+
+**1. Twilio Content Template**
+
+Create an opt-in template in Twilio Console → Messaging → Content Templates:
+- Template Name: `stock_alert_optin`
+- Body: "AI StockAlert would like to send you price alerts when your stocks cross your set thresholds.\n\nCurrently, you're monitoring {{1}} stocks.\n\nWould you like to receive WhatsApp alerts?"
+- Quick Reply buttons: "Yes, enable alerts" | "No thanks"
+
+**2. Backend Support (`backend/api/send_whatsapp.py`)**
+
+```python
+OPTIN_TEMPLATE_SID = os.environ.get('TWILIO_OPTIN_SID', 'HXxxxx')
+
+def send_whatsapp_message(to_number, message=None, template_data=None, template_type="alert"):
+    if template_type == "optin":
+        content_variables = json.dumps({
+            "1": str(template_data.get("1") or template_data.get("stock_count", "0")),
+        })
+        template_sid = OPTIN_TEMPLATE_SID
+```
+
+**3. Desktop App (`core/twilio_service.py`)**
+
+```python
+def send_optin_message(self, to_number: str, stock_count: int) -> bool:
+    payload = {
+        "phone": formatted,
+        "template_type": "optin",
+        "template_data": {"1": str(stock_count)},
+    }
+    return self._call_api(VERCEL_API_URL, payload)
+```
+
+**4. Auto-Trigger on First Enable (`ui/dialogs/settings_dialog.py`)**
+
+```python
+def _on_save_clicked(self):
+    whatsapp_newly_enabled = whatsapp_enabled and not old_whatsapp
+    if whatsapp_newly_enabled:
+        optin_sent = self.config_manager.get("whatsapp_optin_sent", False)
+        if not optin_sent:
+            self._send_whatsapp_optin()
+
+def _send_whatsapp_optin(self):
+    service = TwilioService()
+    success = service.send_optin_message(phone_number, stock_count)
+    if success:
+        self.config_manager.set("whatsapp_optin_sent", True, save=True)
+```
+
+### Key Points
+
+- Opt-in only sent **once** (tracked via `whatsapp_optin_sent` config flag)
+- Triggered when user **enables and saves** WhatsApp settings (not on test button)
+- Stock count dynamically inserted from current ticker list
+- User taps "Yes, enable alerts" button to consent
+
+### Testing Opt-In Flow
+
+1. Set `whatsapp_enabled: false` in config.json
+2. Remove `whatsapp_optin_sent` key if present
+3. Launch app, enable WhatsApp in Settings, click Save
+4. Check WhatsApp for opt-in message with Yes/No buttons
+
+---
+
+*Last updated: February 7, 2026*
