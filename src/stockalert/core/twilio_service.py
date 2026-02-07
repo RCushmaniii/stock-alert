@@ -202,3 +202,48 @@ class TwilioService:
         except Exception as e:
             logger.error(f"Failed to send WhatsApp message: {e}")
             return False
+
+    def send_optin_message(self, to_number: str, stock_count: int) -> bool:
+        """Send a WhatsApp opt-in message to request user consent.
+
+        Args:
+            to_number: Recipient phone number (any format, will be validated)
+            stock_count: Number of stocks currently being monitored
+
+        Returns:
+            True if message was sent successfully, False otherwise
+        """
+        if not to_number:
+            logger.warning("Cannot send opt-in - no recipient number provided")
+            return False
+
+        try:
+            formatted = format_for_whatsapp(to_number)
+            if not formatted:
+                logger.error(f"Invalid phone number for opt-in: {to_number}")
+                return False
+
+            logger.info(f"Sending WhatsApp opt-in to {formatted}")
+
+            # Build request payload for opt-in template
+            payload: dict[str, Any] = {
+                "phone": formatted,
+                "template_type": "optin",
+                "template_data": {
+                    "1": str(stock_count),
+                },
+            }
+
+            result = self._call_api(VERCEL_API_URL, payload)
+
+            if result.get("success"):
+                msg_sid = result.get("message_sid", "unknown")
+                logger.info(f"Opt-in message sent successfully - SID: {msg_sid}")
+                return True
+            else:
+                logger.error(f"Opt-in message failed: {result.get('error')}")
+                return False
+
+        except Exception as e:
+            logger.error(f"Failed to send opt-in message: {e}")
+            return False

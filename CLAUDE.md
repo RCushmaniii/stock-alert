@@ -74,12 +74,18 @@ python setup_msi.py build_exe
 ### Twilio WhatsApp Configuration
 - **Account SID**: (stored in Vercel environment variables)
 - **WhatsApp Number**: (stored in Vercel environment variables)
-- **Template SID**: `HX138b713346901520a4a6d48e21ec3e68` (ai_stock_price_alert_02)
-- **Template Variables**:
-  - `1`: Ticker symbol (e.g., "AAPL")
-  - `2`: Current price (e.g., "182.50")
-  - `3`: Direction ("above" or "below")
-  - `4`: Threshold price (e.g., "180.00")
+
+**Templates:**
+
+| Template | SID | Variables | Purpose |
+|----------|-----|-----------|---------|
+| Price Alert | `HX138b713346901520a4a6d48e21ec3e68` | `{{1}}`=symbol, `{{2}}`=price, `{{3}}`=direction, `{{4}}`=threshold | Alert when price crosses threshold |
+| Opt-In | `HX777abe17f68d1daf042e9771c7c96451` | `{{1}}`=stock_count | Request consent when user enables WhatsApp |
+
+**Opt-In Flow:**
+- Sent automatically when user first enables WhatsApp alerts
+- Shows "Yes, enable alerts" / "No thanks" buttons
+- Tracked via `whatsapp_optin_sent` config flag (won't re-send)
 
 ### IMPORTANT: Templates Required!
 WhatsApp Business numbers CANNOT send freeform messages. You MUST use `template_data`, not `message`. Freeform only works if user messaged you in last 24 hours.

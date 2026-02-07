@@ -537,6 +537,7 @@ class SettingsWidget(QWidget):
 
             whatsapp_enabled = self.whatsapp_alerts_check.isChecked()
             old_whatsapp = orig.get("whatsapp_enabled", False)
+            whatsapp_newly_enabled = whatsapp_enabled and not old_whatsapp
             if whatsapp_enabled != old_whatsapp:
                 changes.append(f"WhatsApp Alerts: {'Enabled' if whatsapp_enabled else 'Disabled'}")
 
@@ -546,6 +547,12 @@ class SettingsWidget(QWidget):
             self.config_manager.set("settings.alerts.windows_enabled", windows_enabled, save=False)
             self.config_manager.set("settings.alerts.windows_audio", windows_audio, save=False)
             self.config_manager.set("settings.alerts.whatsapp_enabled", whatsapp_enabled, save=True)
+
+            # Send WhatsApp opt-in message if newly enabled and not sent before
+            if whatsapp_newly_enabled:
+                optin_sent = self.config_manager.get("whatsapp_optin_sent", False)
+                if not optin_sent:
+                    self._send_whatsapp_optin()
 
             # Update status label
             self.status_label.setText(_("settings.saved"))
@@ -888,3 +895,33 @@ class SettingsWidget(QWidget):
                 QMessageBox.critical(self, "WhatsApp Test Error", error_msg)
 
         self.test_whatsapp_btn.setEnabled(True)
+
+    def _send_whatsapp_optin(self) -> None:
+        """Send WhatsApp opt-in message when user first enables WhatsApp alerts."""
+        from stockalert.core.twilio_service import TwilioService
+
+        # Get phone number from profile
+        profile = self.config_manager.get("profile", {})
+        phone_number = profile.get("cell", "")
+
+        if not phone_number:
+            logger.warning("Cannot send opt-in - no phone number configured")
+            return
+
+        # Get stock count
+        tickers = self.config_manager.get_tickers()
+        stock_count = len(tickers)
+
+        try:
+            service = TwilioService()
+            success = service.send_optin_message(phone_number, stock_count)
+
+            if success:
+                # Mark opt-in as sent so we don't send again
+                self.config_manager.set("whatsapp_optin_sent", True, save=True)
+                logger.info("WhatsApp opt-in message sent successfully")
+            else:
+                logger.warning("Failed to send WhatsApp opt-in message")
+
+        except Exception as e:
+            logger.exception(f"Error sending WhatsApp opt-in: {e}")

@@ -17,8 +17,9 @@ from http.server import BaseHTTPRequestHandler
 from twilio.rest import Client
 
 
-# Content Template SID for stock price alerts (ai_stock_price_alert_02)
-STOCK_ALERT_TEMPLATE_SID = "HX138b713346901520a4a6d48e21ec3e68"
+# Content Template SIDs
+STOCK_ALERT_TEMPLATE_SID = "HX138b713346901520a4a6d48e21ec3e68"  # ai_stock_price_alert_02
+OPTIN_TEMPLATE_SID = os.environ.get('TWILIO_OPTIN_SID', 'HX777abe17f68d1daf042e9771c7c96451')
 
 # Phone number formatting patterns by country
 COUNTRY_FORMATS = {
@@ -97,14 +98,15 @@ def format_phone_number(phone: str, country_code: str = None) -> str:
         return f'+{cleaned}'
 
 
-def send_whatsapp_message(to_number: str, message: str = None, template_data: dict = None) -> dict:
+def send_whatsapp_message(to_number: str, message: str = None, template_data: dict = None, template_type: str = "alert") -> dict:
     """
     Send a WhatsApp message via Twilio.
 
     Args:
         to_number: Recipient phone number (E.164 format)
         message: Message text (for free-form/session messages)
-        template_data: Dict with symbol, price, threshold, direction (for template messages)
+        template_data: Dict with template variables
+        template_type: "alert" for price alerts, "optin" for opt-in message
 
     Returns:
         dict with success status and message SID or error
@@ -126,19 +128,27 @@ def send_whatsapp_message(to_number: str, message: str = None, template_data: di
         from_whatsapp = f'whatsapp:{whatsapp_number}'
         to_whatsapp = f'whatsapp:{to_number}'
 
-        # Use template for stock alerts, free-form for test messages
+        # Use template for stock alerts or opt-in, free-form for test messages
         if template_data:
-            # Template variables: {{1}}=symbol, {{2}}=price, {{3}}=direction, {{4}}=threshold
-            # Accept both formats: {"1": "AAPL"} or {"symbol": "AAPL"}
-            content_variables = json.dumps({
-                "1": template_data.get("1") or template_data.get("symbol", "STOCK"),
-                "2": str(template_data.get("2") or template_data.get("price", "0.00")),
-                "3": template_data.get("3") or template_data.get("direction", "crossed"),
-                "4": str(template_data.get("4") or template_data.get("threshold", "0.00")),
-            })
+            if template_type == "optin":
+                # Opt-in template: {{1}} = stock count
+                content_variables = json.dumps({
+                    "1": str(template_data.get("1") or template_data.get("stock_count", "0")),
+                })
+                template_sid = OPTIN_TEMPLATE_SID
+            else:
+                # Alert template: {{1}}=symbol, {{2}}=price, {{3}}=direction, {{4}}=threshold
+                # Accept both formats: {"1": "AAPL"} or {"symbol": "AAPL"}
+                content_variables = json.dumps({
+                    "1": template_data.get("1") or template_data.get("symbol", "STOCK"),
+                    "2": str(template_data.get("2") or template_data.get("price", "0.00")),
+                    "3": template_data.get("3") or template_data.get("direction", "crossed"),
+                    "4": str(template_data.get("4") or template_data.get("threshold", "0.00")),
+                })
+                template_sid = STOCK_ALERT_TEMPLATE_SID
 
             message_obj = client.messages.create(
-                content_sid=STOCK_ALERT_TEMPLATE_SID,
+                content_sid=template_sid,
                 content_variables=content_variables,
                 from_=from_whatsapp,
                 to=to_whatsapp
@@ -215,7 +225,8 @@ class handler(BaseHTTPRequestHandler):
         phone = data.get('phone')
         message = data.get('message')
         country_code = data.get('country_code')
-        template_data = data.get('template_data')  # For stock alerts
+        template_data = data.get('template_data')  # For stock alerts or opt-in
+        template_type = data.get('template_type', 'alert')  # "alert" or "optin"
 
         # Require phone and either message or template_data
         if not phone:
@@ -236,7 +247,7 @@ class handler(BaseHTTPRequestHandler):
         formatted_phone = format_phone_number(phone, country_code)
 
         # Send message (template takes priority if both provided)
-        result = send_whatsapp_message(formatted_phone, message, template_data)
+        result = send_whatsapp_message(formatted_phone, message, template_data, template_type)
 
         # Return response
         status_code = 200 if result['success'] else 500
