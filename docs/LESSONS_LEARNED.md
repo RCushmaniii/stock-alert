@@ -972,6 +972,80 @@ def send_consolidated_alert(self, alerts: list) -> None:
 
 ---
 
+## Currency Switcher (USD/MXN)
+
+### Architecture
+
+The currency feature allows users to view prices in USD or Mexican Pesos (MXN):
+
+- **Exchange Rate API**: Uses exchangerate-api.com free tier (1,500 requests/month)
+- **Caching**: Rate cached for 1 hour to minimize API calls
+- **Storage**: All values stored internally in USD (Option A pattern)
+- **Display**: Converted on-the-fly using cached exchange rate
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/stockalert/api/exchange_rate.py` | API client with caching |
+| `src/stockalert/core/currency.py` | CurrencyFormatter class |
+| `src/stockalert/ui/main_window.py` | Currency toggle in header |
+
+### Implementation Pattern
+
+```python
+# In main_window.py __init__
+self.currency_formatter = CurrencyFormatter(config_manager)
+set_global_formatter(self.currency_formatter)
+
+# Set up exchange rate API key (embedded)
+set_exchange_rate_api_key("your-api-key")
+
+# Pre-fetch rate if currency is MXN
+if config_manager.get("settings.currency", "USD") == "MXN":
+    self._refresh_exchange_rate()
+```
+
+### CurrencyFormatter Usage
+
+```python
+from stockalert.core.currency import get_formatter
+
+formatter = get_formatter()
+
+# Format price (converts if MXN)
+price_str = formatter.format_price(123.45)  # "$123.45" or "MX$2,469.00"
+
+# Format market cap
+cap_str = formatter.format_market_cap(50000)  # "$50.0B" or "MX$1.0T"
+
+# Convert user input back to USD
+usd_value = formatter.parse_user_input("2500")  # Returns USD equivalent
+```
+
+### Header Toggle Pattern
+
+The currency toggle uses the same style as language buttons:
+
+```python
+# USD | MXN toggle (reuses langButton style)
+self.currency_usd_btn = QPushButton("USD")
+self.currency_usd_btn.setObjectName("langButton")
+self.currency_usd_btn.clicked.connect(lambda: self._set_currency("USD"))
+
+self.currency_mxn_btn = QPushButton("MXN")
+self.currency_mxn_btn.setObjectName("langButton")
+self.currency_mxn_btn.clicked.connect(lambda: self._set_currency("MXN"))
+```
+
+### API Budget Analysis
+
+- Free tier: 1,500 requests/month
+- Market hours: ~137 hours/month
+- At 1 request/hour: ~137 requests/month (under 10% of limit)
+
+---
+
 ## Onboarding Dialog
 
 ### Reset Flag for Testing

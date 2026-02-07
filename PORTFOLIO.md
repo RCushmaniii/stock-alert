@@ -30,10 +30,12 @@ key_features:
   - "Smart consolidated notifications - multiple alerts combined into single notification per check cycle"
   - "Automatic market hours detection - only monitors during US market hours (9:30 AM - 4:00 PM ET)"
   - "Bilingual interface (English/Spanish) with full i18n support"
+  - "Multi-currency display: Toggle between USD and Mexican Pesos (MXN) with live exchange rates"
   - "Background service runs silently in system tray - alerts work even when UI is closed"
   - "Company profile enrichment with logos, industry, and market cap data from Finnhub"
-  - "Integrated news feed for monitored stocks"
+  - "Integrated news feed for monitored stocks (up to 5 tickers)"
   - "Professional installer with Windows Start Menu integration and auto-start capability"
+  - "Dark/light theme support with one-click toggle"
 
 metrics:
   - "Sub-2-second alert delivery from price change detection to notification"

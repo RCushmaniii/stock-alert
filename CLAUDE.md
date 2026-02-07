@@ -52,6 +52,8 @@ python setup_msi.py build_exe
 - **Startup Dialogs**: Must show AFTER UI is created, via QTimer.singleShot()
 - **API Key Storage**: Keyring fails in frozen exe; uses config.json fallback
 - **Translations**: Always update BOTH en.json AND es.json
+- **Currency Display**: All prices stored in USD internally; `CurrencyFormatter` handles display conversion
+- **Exchange Rate API**: Key embedded in app (`exchange_rate.py`), cached 1 hour
 
 ---
 
