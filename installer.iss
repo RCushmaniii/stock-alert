@@ -2,7 +2,7 @@
 ; Professional installer with desktop shortcut and launch-after-install options
 
 #define MyAppName "AI StockAlert"
-#define MyAppVersion "4.0.0"
+#define MyAppVersion "4.1.0"
 #define MyAppPublisher "CUSHLABS.AI"
 #define MyAppURL "https://cushlabs.ai"
 #define MyAppExeName "StockAlert.exe"
