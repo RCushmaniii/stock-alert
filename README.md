@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-Proprietary-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-lightgrey.svg)](https://www.microsoft.com/windows)
 
-**[Download for Windows](https://ai-stock-alert-website.netlify.app/)** | **[Live Demo](https://ai-stock-alert-website.netlify.app/)**
+**[Download for Windows](https://aistockalert.app/)** | **[Learn More](https://aistockalert.app/)**
 
 ## Features
 
