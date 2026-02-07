@@ -44,7 +44,7 @@ metrics:
 
 # === LINKS ===
 demo_url: ""
-live_url: ""
+live_url: "https://aistockalert.app/"
 
 # === OPTIONAL ===
 hero_images: []
