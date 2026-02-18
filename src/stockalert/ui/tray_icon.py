@@ -12,9 +12,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction, QIcon, QCursor, QPixmap, QPainter, QColor, QPen
+from PyQt6.QtGui import QAction, QIcon, QCursor
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
+from stockalert.core.paths import get_bundled_assets_dir
 from stockalert.i18n.translator import _
 
 if TYPE_CHECKING:
@@ -54,9 +55,8 @@ class TrayIcon(QSystemTrayIcon):
         self._monitoring_enabled = True
         self._ticker_count = 0
 
-        # 1. Force programmatic branded icon that cannot be 'missing'
-        logger.info("Creating programmatic branded icon for system tray")
-        self.setIcon(self._create_branded_icon())
+        # 1. Load branded icon from file
+        self.setIcon(self._load_branded_icon())
         self.setToolTip("AI StockAlert")
 
         # 2. Create menu with explicit ownership
@@ -82,35 +82,35 @@ class TrayIcon(QSystemTrayIcon):
             
         logger.info("System tray icon initialized")
 
-    def _create_branded_icon(self) -> QIcon:
-        """Create a branded orange icon programmatically with multiple sizes."""
-        icon = QIcon()
+    def _load_branded_icon(self) -> QIcon:
+        """Load the branded icon from the bundled assets directory.
 
-        # Create multiple sizes for Windows DPI scaling
-        for size in [16, 24, 32, 48, 64, 128, 256]:
-            pixmap = QPixmap(size, size)
-            pixmap.fill(QColor("#FF6A3D"))  # Solid orange
+        Tries SVG first (crispest at all sizes), then falls back to .ico.
+        """
+        assets_dir = get_bundled_assets_dir()
 
-            painter = QPainter(pixmap)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # Try SVG first (scales perfectly at any DPI)
+        svg_path = assets_dir / "stock_trend.svg"
+        if not svg_path.exists():
+            # In frozen builds, SVG is under lib/stockalert/ui/assets/
+            svg_path = assets_dir / "lib" / "stockalert" / "ui" / "assets" / "stock_trend.svg"
 
-            # Draw white "$" symbol scaled to size
-            scale = size / 16.0
-            pen_width = max(1, int(2 * scale))
-            painter.setPen(QPen(Qt.GlobalColor.white, pen_width))
+        if svg_path.exists():
+            icon = QIcon(str(svg_path))
+            if not icon.isNull():
+                logger.info(f"Loaded SVG tray icon from {svg_path}")
+                return icon
 
-            # Draw stylized "S" shape
-            x1, y1 = int(4 * scale), int(12 * scale)
-            x2, y2 = int(8 * scale), int(6 * scale)
-            x3, y3 = int(12 * scale), int(10 * scale)
-            painter.drawLine(x1, y1, x2, y2)
-            painter.drawLine(x2, y2, x3, y3)
+        # Fall back to .ico
+        ico_path = assets_dir / "stock_alert.ico"
+        if ico_path.exists():
+            icon = QIcon(str(ico_path))
+            if not icon.isNull():
+                logger.info(f"Loaded ICO tray icon from {ico_path}")
+                return icon
 
-            painter.end()
-            icon.addPixmap(pixmap)
-
-        logger.info(f"Created icon, isNull={icon.isNull()}, sizes={icon.availableSizes()}")
-        return icon
+        logger.warning("No branded icon file found, using empty icon")
+        return QIcon()
 
     def _create_menu(self) -> None:
         """Create the context menu with explicit ownership."""

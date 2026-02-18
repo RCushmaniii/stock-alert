@@ -2237,60 +2237,32 @@ QDialog {{
             logger.exception(f"Error fetching exchange rate: {e}")
 
     def _create_app_icon(self) -> QIcon:
-        """Load the branded app icon from the .ico file.
+        """Load the branded app icon.
 
-        Uses QImage.fromData to read the .ico file directly (avoids Qt plugin issues).
-        Falls back to a programmatic orange icon if the .ico file is missing.
+        Tries SVG first (crispest), then .ico file.
         """
-        from PyQt6.QtCore import Qt, QSize
-        from PyQt6.QtGui import QImage, QPixmap, QPainter, QColor, QPen
+        assets_dir = get_bundled_assets_dir()
 
-        ico_path = get_bundled_assets_dir() / "stock_alert.ico"
-        if ico_path.exists():
-            # Read the .ico file and create a QIcon with multiple sizes
-            # QIcon(path) may fail if Qt's ICO plugin isn't found in frozen builds
-            icon = QIcon(str(ico_path))
-            sizes = icon.availableSizes()
-            if not icon.isNull() and len(sizes) > 0:
-                logger.info(f"Loaded app icon from {ico_path}, sizes={sizes}")
-                return icon
-
-            # Fallback: load as QPixmap at specific sizes
-            logger.info("QIcon(path) returned no sizes, loading via QPixmap")
-            icon = QIcon()
-            for size in [16, 32, 48, 64, 128, 256]:
-                pixmap = QPixmap(str(ico_path))
-                if not pixmap.isNull():
-                    scaled = pixmap.scaled(
-                        QSize(size, size),
-                        Qt.AspectRatioMode.KeepAspectRatio,
-                        Qt.TransformationMode.SmoothTransformation,
-                    )
-                    icon.addPixmap(scaled)
+        # Try SVG first
+        svg_path = assets_dir / "stock_trend.svg"
+        if not svg_path.exists():
+            svg_path = assets_dir / "lib" / "stockalert" / "ui" / "assets" / "stock_trend.svg"
+        if svg_path.exists():
+            icon = QIcon(str(svg_path))
             if not icon.isNull():
-                logger.info(f"Loaded app icon via QPixmap scaling, sizes={icon.availableSizes()}")
+                logger.info(f"Loaded app icon from {svg_path}")
                 return icon
-            logger.warning("QPixmap also failed to load .ico")
 
-        # Fallback: programmatic orange icon
-        logger.info("Using fallback programmatic icon")
-        icon = QIcon()
-        for size in [16, 24, 32, 48, 64, 128, 256]:
-            pixmap = QPixmap(size, size)
-            pixmap.fill(QColor("#FF6A3D"))
-            painter = QPainter(pixmap)
-            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            scale = size / 64.0
-            pen_width = max(1, int(4 * scale))
-            painter.setPen(QPen(Qt.GlobalColor.white, pen_width))
-            x1, y1 = int(12 * scale), int(48 * scale)
-            x2, y2 = int(28 * scale), int(24 * scale)
-            x3, y3 = int(52 * scale), int(40 * scale)
-            painter.drawLine(x1, y1, x2, y2)
-            painter.drawLine(x2, y2, x3, y3)
-            painter.end()
-            icon.addPixmap(pixmap)
-        return icon
+        # Fall back to .ico
+        ico_path = assets_dir / "stock_alert.ico"
+        if ico_path.exists():
+            icon = QIcon(str(ico_path))
+            if not icon.isNull():
+                logger.info(f"Loaded app icon from {ico_path}")
+                return icon
+
+        logger.warning("No app icon file found")
+        return QIcon()
 
     def _toggle_theme(self) -> None:
         """Toggle between dark and light themes."""

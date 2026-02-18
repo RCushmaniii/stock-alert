@@ -51,8 +51,9 @@ if pywin32_system32.exists():
 
 # Build include_files list
 include_files = [
-    # Application icon
+    # Application icons
     ("stock_alert.ico", "stock_alert.ico"),
+    ("src/stockalert/ui/assets/stock_trend.svg", "stock_trend.svg"),
     # Configuration example
     ("config.example.json", "config.example.json"),
     # Documentation
@@ -95,8 +96,9 @@ build_exe_options = {
         # PyQt6 must be explicitly included
         "PyQt6",
         "PyQt6.QtCore",
-        "PyQt6.QtGui", 
+        "PyQt6.QtGui",
         "PyQt6.QtWidgets",
+        "PyQt6.QtSvg",
         # Third-party packages
         "finnhub",
         "dotenv",
@@ -121,6 +123,7 @@ build_exe_options = {
         "PyQt6.QtGui",
         "PyQt6.QtWidgets",
         "PyQt6.QtNetwork",
+        "PyQt6.QtSvg",
         # WinRT modules for windows-toasts notifications
         "winrt",
         "winrt.windows.foundation",

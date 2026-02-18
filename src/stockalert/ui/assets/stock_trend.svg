@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 256 256">
+  <!-- Orange rounded square background -->
+  <rect width="256" height="256" rx="44" ry="44" fill="#FF6A3D"/>
+
+  <!-- White stock trend zigzag: uptick, downtick, uptick (overall uptrend) -->
+  <polyline
+    points="40,190 98,80 155,148 198,74"
+    fill="none"
+    stroke="white"
+    stroke-width="22"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Crisp filled arrowhead aligned with last segment direction -->
+  <polygon
+    points="220,44 210,84 186,66"
+    fill="white"
+  />
+</svg>
