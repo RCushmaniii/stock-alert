@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 # Service configuration
 SERVICE_NAME = "StockAlertService"
 APP_DATA_FOLDER = "StockAlert"
+# Must match the shortcut name in installer.iss [Icons] section
+AUTOSTART_SHORTCUT_NAME = "AI StockAlert.lnk"
 
 
 def get_app_data_dir() -> Path:
@@ -589,12 +591,20 @@ def get_startup_folder() -> Path:
 def is_autostart_enabled() -> bool:
     """Check if StockAlert is configured to start with Windows.
 
+    Checks for both the current shortcut name and the legacy name
+    to handle upgrades from older versions.
+
     Returns:
         True if autostart is enabled
     """
     startup_folder = get_startup_folder()
-    shortcut_path = startup_folder / "StockAlert.lnk"
-    return shortcut_path.exists()
+    # Check current name (matches installer)
+    if (startup_folder / AUTOSTART_SHORTCUT_NAME).exists():
+        return True
+    # Check legacy name from older versions
+    if (startup_folder / "StockAlert.lnk").exists():
+        return True
+    return False
 
 
 def _get_installed_exe_path() -> Path | None:
@@ -652,7 +662,13 @@ def enable_autostart() -> tuple[bool, str]:
         if not startup_folder.exists():
             return False, f"Startup folder not found: {startup_folder}"
 
-        shortcut_path = startup_folder / "StockAlert.lnk"
+        shortcut_path = startup_folder / AUTOSTART_SHORTCUT_NAME
+
+        # Remove legacy shortcut if it exists (older versions used "StockAlert.lnk")
+        legacy_path = startup_folder / "StockAlert.lnk"
+        if legacy_path.exists() and legacy_path != shortcut_path:
+            legacy_path.unlink()
+            logger.info(f"Removed legacy autostart shortcut: {legacy_path}")
 
         if getattr(sys, "frozen", False):
             # Frozen build: prefer the installed path from registry,
@@ -704,18 +720,30 @@ $Shortcut.Save()
 def disable_autostart() -> tuple[bool, str]:
     """Disable StockAlert from starting automatically with Windows.
 
-    Removes the shortcut from the Windows Startup folder.
+    Removes all startup shortcuts (current and legacy names).
 
     Returns:
         Tuple of (success, message)
     """
     try:
         startup_folder = get_startup_folder()
-        shortcut_path = startup_folder / "StockAlert.lnk"
+        removed = False
 
+        # Remove current shortcut
+        shortcut_path = startup_folder / AUTOSTART_SHORTCUT_NAME
         if shortcut_path.exists():
             shortcut_path.unlink()
-            logger.info(f"Removed autostart shortcut from {shortcut_path}")
+            logger.info(f"Removed autostart shortcut: {shortcut_path}")
+            removed = True
+
+        # Also remove legacy shortcut if present
+        legacy_path = startup_folder / "StockAlert.lnk"
+        if legacy_path.exists():
+            legacy_path.unlink()
+            logger.info(f"Removed legacy autostart shortcut: {legacy_path}")
+            removed = True
+
+        if removed:
             return True, "StockAlert will no longer start automatically with Windows"
         else:
             return True, "Autostart was not enabled"

@@ -81,8 +81,9 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 Type: files; Name: "{app}\config.json"
 Type: files; Name: "{app}\*.log"
 Type: dirifempty; Name: "{app}"
-; Remove startup shortcut on uninstall
+; Remove startup shortcuts on uninstall (current and legacy names)
 Type: files; Name: "{userstartup}\{#MyAppName}.lnk"
+Type: files; Name: "{userstartup}\StockAlert.lnk"
 
 [Code]
 // Custom code for additional functionality
