@@ -160,7 +160,7 @@ build_exe_options = {
     "path": ["src"] + sys.path,
     # Don't zip PyQt6 - it needs DLLs accessible
     "zip_include_packages": ["*"],
-    "zip_exclude_packages": ["PyQt6"],
+    "zip_exclude_packages": ["PyQt6", "pytz"],
 }
 
 # MSI-specific options
