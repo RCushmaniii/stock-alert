@@ -1,81 +1,42 @@
-# 🚀 Quick Start: Building MSI Installer
+# Quick Start: Building the Installer
 
-## TL;DR - Build in 3 Steps
+## TL;DR — Three Commands
 
-```powershell
-# 1. Ensure you're in the project directory
-cd aa-stock-alert
+```bash
+# 1. Kill any running instance
+taskkill //F //IM StockAlert.exe
 
-# 2. Run the automated build script
-.\build_msi.ps1
+# 2. Build the frozen executable (cx_Freeze)
+python setup_msi.py build_exe
 
-# 3. Find your MSI in the dist/ folder
+# 3. Package into installer (Inno Setup)
+"$LOCALAPPDATA/Programs/Inno Setup 6/ISCC.exe" installer.iss
 ```
 
-## What Gets Installed
+**Output:** `dist/StockAlert-<version>-Setup.exe`
 
-The MSI installer includes:
-- ✅ **StockAlert.exe** - Main monitoring application
-- ✅ **StockAlertConfig.exe** - Configuration GUI
-- ✅ **All dependencies** - No Python installation required
-- ✅ **Start Menu shortcuts** - Easy access from Windows Start
-- ✅ **Example config** - Ready to customize
+## What You Need
 
-## Required Packages
+- Python 3.12 with project venv activated
+- [Inno Setup 6](https://jrsoftware.org/isdownload.php) installed (goes to `%LOCALAPPDATA%\Programs\Inno Setup 6\`)
+- All runtime dependencies installed (`pip install -e ".[dev]"`)
 
-The build process uses:
-- **cx-Freeze 6.15.14** - Creates the MSI installer
-- **PyInstaller 6.3.0** - Alternative packaging tool (optional)
+## What Gets Built
 
-These are automatically installed by `build_msi.ps1`.
-
-## Manual Build (If Script Fails)
-
-```powershell
-# Activate virtual environment
-.\venv\Scripts\Activate.ps1
-
-# Install build dependencies
-pip install -r requirements-build.txt
-
-# Build MSI
-python setup.py bdist_msi
-```
-
-## Output
-
-```
-dist/
-└── StockAlert-2.0.0-win64.msi    (~40-60 MB)
-```
-
-## Customization
-
-Edit `setup.py` to change:
-- **Version number** - `APP_VERSION = "2.0.0"`
-- **Install location** - `initial_target_dir`
-- **Included files** - `include_files` list
-- **Console visibility** - `base="Console"` or `base="Win32GUI"`
-
-## Full Documentation
-
-See [docs/BUILD_MSI.md](docs/BUILD_MSI.md) for:
-- Detailed troubleshooting
-- Advanced customization
-- Testing procedures
-- Distribution checklist
+| Stage | Command | Output |
+|-------|---------|--------|
+| 1. Frozen exe | `python setup_msi.py build_exe` | `build/exe.win-amd64-3.12/StockAlert.exe` |
+| 2. Installer | `ISCC.exe installer.iss` | `dist/StockAlert-<version>-Setup.exe` |
 
 ## Common Issues
 
-### "Module not found" during build
-→ Add missing package to `setup.py` → `packages` list
+| Problem | Fix |
+|---------|-----|
+| "Permission denied" / files locked | Kill running `StockAlert.exe` first |
+| Missing module at runtime | Add to `packages` or `includes` in `setup_msi.py` |
+| Inno Setup not found | It installs to `%LOCALAPPDATA%`, not `%PROGRAMFILES%` |
+| Locale/assets missing at runtime | Check `include_files` in `setup_msi.py` |
 
-### MSI won't install
-→ Uninstall previous version first
+## Full Documentation
 
-### Build files locked
-→ Close all running instances of StockAlert
-
----
-
-**Ready to build?** Run `.\build_msi.ps1` and you're done! 🎉
+See [BUILD_INSTALLER.md](BUILD_INSTALLER.md) for the detailed guide.
