@@ -597,11 +597,52 @@ def is_autostart_enabled() -> bool:
     return shortcut_path.exists()
 
 
+def _get_installed_exe_path() -> Path | None:
+    """Find the installed StockAlert.exe path from the Windows registry.
+
+    Checks the Inno Setup uninstall registry entry to find the actual
+    install location, which is more reliable than using sys.executable
+    (which may point to a dev build directory).
+
+    Returns:
+        Path to installed StockAlert.exe, or None if not found
+    """
+    if sys.platform != "win32":
+        return None
+
+    try:
+        import winreg
+
+        # Inno Setup AppId from installer.iss
+        app_id = "{52ED9883-9713-4F05-8B5A-E78A7D1DD992}"
+        uninstall_key = rf"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{app_id}_is1"
+
+        for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+            try:
+                with winreg.OpenKey(hive, uninstall_key) as key:
+                    install_dir, _ = winreg.QueryValueEx(key, "InstallLocation")
+                    exe_path = Path(install_dir) / "StockAlert.exe"
+                    if exe_path.exists():
+                        logger.info(f"Found installed exe from registry: {exe_path}")
+                        return exe_path
+            except FileNotFoundError:
+                continue
+
+    except Exception as e:
+        logger.debug(f"Could not read install path from registry: {e}")
+
+    return None
+
+
 def enable_autostart() -> tuple[bool, str]:
     """Enable StockAlert to start automatically with Windows.
 
     Creates a shortcut in the Windows Startup folder (no admin required).
-    Uses VBS script for source installs to avoid showing console window.
+    Launches the GUI minimized to the system tray (--tray flag) so users
+    see the tray icon and can interact with the app.
+
+    For frozen builds, prefers the installed exe path from the registry
+    over sys.executable to avoid pointing to temporary build directories.
 
     Returns:
         Tuple of (success, message)
@@ -613,13 +654,15 @@ def enable_autostart() -> tuple[bool, str]:
 
         shortcut_path = startup_folder / "StockAlert.lnk"
 
-        # Get the path to the service
         if getattr(sys, "frozen", False):
-            # Running as compiled exe - use the service exe directly
-            target_path = Path(sys.executable).parent / "StockAlert-Service.exe"
-            if not target_path.exists():
+            # Frozen build: prefer the installed path from registry,
+            # fall back to current exe location
+            installed_path = _get_installed_exe_path()
+            if installed_path:
+                target_path = installed_path
+            else:
                 target_path = Path(sys.executable)
-            arguments = "--service"
+            arguments = "--tray"
             working_dir = str(target_path.parent)
         else:
             # Running from source - use VBS script to avoid console window
@@ -635,7 +678,7 @@ $Shortcut = $WshShell.CreateShortcut("{shortcut_path}")
 $Shortcut.TargetPath = "{target_path}"
 $Shortcut.Arguments = "{arguments}"
 $Shortcut.WorkingDirectory = "{working_dir}"
-$Shortcut.Description = "StockAlert Background Service"
+$Shortcut.Description = "AI StockAlert - Start minimized to system tray"
 $Shortcut.WindowStyle = 7
 $Shortcut.Save()
 '''
@@ -647,7 +690,7 @@ $Shortcut.Save()
         )
 
         if result.returncode == 0:
-            logger.info(f"Created autostart shortcut at {shortcut_path}")
+            logger.info(f"Created autostart shortcut at {shortcut_path} -> {target_path}")
             return True, "StockAlert will now start automatically with Windows"
         else:
             logger.error(f"Failed to create shortcut: {result.stderr}")

@@ -51,6 +51,8 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 ; Start Menu shortcut - checked by default
 Name: "startmenu"; Description: "Create a Start Menu shortcut"; GroupDescription: "{cm:AdditionalIcons}"
+; Start with Windows - checked by default (recommended)
+Name: "autostart"; Description: "Start with Windows (recommended)"; GroupDescription: "Startup:"
 
 [Files]
 ; Main application files from cx_Freeze build
@@ -67,6 +69,8 @@ Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
 ; Desktop shortcut - optional (user can choose)
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\stock_alert.ico"; Tasks: desktopicon
+; Windows Startup shortcut - starts minimized to tray on login
+Name: "{userstartup}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "--tray"; IconFilename: "{app}\stock_alert.ico"; Tasks: autostart
 
 [Run]
 ; Launch after install - checked by default
@@ -77,6 +81,8 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 Type: files; Name: "{app}\config.json"
 Type: files; Name: "{app}\*.log"
 Type: dirifempty; Name: "{app}"
+; Remove startup shortcut on uninstall
+Type: files; Name: "{userstartup}\{#MyAppName}.lnk"
 
 [Code]
 // Custom code for additional functionality
