@@ -21,9 +21,7 @@ status: "Production"
 
 # === DETAIL PAGE ===
 problem: "Active traders and investors need to monitor multiple stock positions simultaneously but can't watch screens all day. Missing critical price movements can result in significant financial losses or missed opportunities. Existing solutions are either too complex, require expensive subscriptions, or lack reliable mobile notifications."
-
 solution: "AI StockAlert is a professional Windows desktop application that monitors stock prices in real-time and sends instant alerts when prices cross user-defined thresholds. It combines the reliability of Windows desktop notifications with the convenience of WhatsApp mobile alerts, ensuring users never miss important price movements."
-
 key_features:
   - "Real-time price monitoring for up to 15 stocks with configurable check intervals (free tier)"
   - "Multi-channel alerts: Windows toast notifications with audio and WhatsApp mobile messages"
@@ -37,52 +35,51 @@ key_features:
   - "Professional installer with Windows Start Menu integration and auto-start capability"
   - "Dark/light theme support with one-click toggle"
 
-metrics:
-  - "Sub-2-second alert delivery from price change detection to notification"
-  - "15 stocks monitored simultaneously on free tier"
-  - "60 API calls/minute rate-limited token bucket for optimal Finnhub usage"
+# === MEDIA: PORTFOLIO SLIDES ===
+slides:
+  - src: "public/images/stockalert-01.png"
+    alt_en: "AI StockAlert main dashboard"
+    alt_es: "Real-time stock monitoring dashboard with live prices and alert status."
+  - src: "public/images/stockalert-02.png"
+    alt_en: "AI StockAlert alert configuration"
+    alt_es: "Configure price thresholds with above/below triggers for each stock."
+  - src: "public/images/stockalert-03.png"
+    alt_en: "AI StockAlert settings panel"
+    alt_es: "Full settings panel with API key, language, theme, and notification preferences."
+  - src: "public/images/stockalert-04.png"
+    alt_en: "AI StockAlert WhatsApp integration"
+    alt_es: "WhatsApp mobile alerts deliver price notifications anywhere."
+  - src: "public/images/stockalert-05.png"
+    alt_en: "AI StockAlert system tray"
+    alt_es: "Runs silently in the system tray — monitoring continues even when the window is closed."
+  - src: "public/images/stockalert-06.png"
+    alt_en: "AI StockAlert Windows notification"
+    alt_es: "Native Windows toast notifications with stock details and audio alerts."
+  - src: "public/images/stockalert-07.png"
+    alt_en: "AI StockAlert dark theme"
+    alt_es: "Dark theme for comfortable monitoring during extended sessions."
+  - src: "public/images/stockalert-08.png"
+    alt_en: "AI StockAlert company profiles"
+    alt_es: "Enriched company profiles with logos, industry, and market cap data."
+  - src: "public/images/stockalert-09.png"
+    alt_en: "AI StockAlert news feed"
+    alt_es: "Integrated news feed for monitored stocks keeps you informed."
+  - src: "public/images/stockalert-10.png"
+    alt_en: "AI StockAlert multi-currency display"
+    alt_es: "Toggle between USD and MXN with live exchange rate conversion."
+
+# === MEDIA: VIDEO ===
+video_poster: "public/video/AI-StockAlert-A-Case-Study-poster.jpg"
 
 # === LINKS ===
 demo_url: ""
 live_url: "https://aistockalert.app/"
 
 # === OPTIONAL ===
-hero_images:
-  - path: "public/images/stockalert-01.png"
-    alt: "AI StockAlert main dashboard"
-    caption: "Real-time stock monitoring dashboard with live prices and alert status."
-  - path: "public/images/stockalert-02.png"
-    alt: "AI StockAlert alert configuration"
-    caption: "Configure price thresholds with above/below triggers for each stock."
-  - path: "public/images/stockalert-03.png"
-    alt: "AI StockAlert settings panel"
-    caption: "Full settings panel with API key, language, theme, and notification preferences."
-  - path: "public/images/stockalert-04.png"
-    alt: "AI StockAlert WhatsApp integration"
-    caption: "WhatsApp mobile alerts deliver price notifications anywhere."
-  - path: "public/images/stockalert-05.png"
-    alt: "AI StockAlert system tray"
-    caption: "Runs silently in the system tray — monitoring continues even when the window is closed."
-  - path: "public/images/stockalert-06.png"
-    alt: "AI StockAlert Windows notification"
-    caption: "Native Windows toast notifications with stock details and audio alerts."
-  - path: "public/images/stockalert-07.png"
-    alt: "AI StockAlert dark theme"
-    caption: "Dark theme for comfortable monitoring during extended sessions."
-  - path: "public/images/stockalert-08.png"
-    alt: "AI StockAlert company profiles"
-    caption: "Enriched company profiles with logos, industry, and market cap data."
-  - path: "public/images/stockalert-09.png"
-    alt: "AI StockAlert news feed"
-    caption: "Integrated news feed for monitored stocks keeps you informed."
-  - path: "public/images/stockalert-10.png"
-    alt: "AI StockAlert multi-currency display"
-    caption: "Toggle between USD and MXN with live exchange rate conversion."
-video_brief:
-  path: "public/video/AI_StockAlert__A_Case_Study.mp4"
-  poster: "public/video/AI-StockAlert-A-Case-Study-poster.jpg"
-  alt: "AI StockAlert case study — real-time stock monitoring with multi-channel alerts"
-  caption: "Product case study showcasing AI StockAlert's real-time monitoring, Windows notifications, and WhatsApp alert delivery."
+metrics:
+  - "Sub-2-second alert delivery from price change detection to notification"
+  - "15 stocks monitored simultaneously on free tier"
+  - "60 API calls/minute rate-limited token bucket for optimal Finnhub usage"
 tags:
   - "desktop-app"
   - "fintech"
