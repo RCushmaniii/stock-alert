@@ -69,8 +69,8 @@ slides:
     alt_es: "En resumen — resuelve un problema manual, aprovecha WhatsApp, respeta la billetera y la privacidad del usuario"
 
 # === MEDIA: VIDEO ===
-video_src: "public/video/AI_StockAlert__A_Case_Study.mp4"
-video_poster: "public/video/AI-StockAlert-A-Case-Study-poster.jpg"
+video_src: "public/video/AI-StockAlert-brief.mp4"
+video_poster: "public/video/AI-StockAlert-brief-poster.jpg"
 
 # === METRICS ===
 metrics:
