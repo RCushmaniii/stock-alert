@@ -2,7 +2,7 @@
 # === CONTROL FLAGS ===
 portfolio_enabled: true
 portfolio_priority: 3
-portfolio_featured: true
+portfolio_featured: false
 
 # === CARD DISPLAY ===
 title: "AI StockAlert"
