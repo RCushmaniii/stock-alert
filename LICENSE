@@ -1,17 +1,26 @@
-PROPRIETARY SOFTWARE LICENSE
+Copyright (c) 2024-2026 CushLabs AI Services (Robert Cushman III). All Rights Reserved.
 
-Copyright (c) 2024-2025 CUSHLABS.AI. All Rights Reserved.
+PROPRIETARY — PORTFOLIO DEMONSTRATION ONLY
 
-This software and associated documentation files (the "Software") are the
-proprietary property of CUSHLABS.AI. Unauthorized copying, modification,
-distribution, or use of this Software, via any medium, is strictly prohibited.
+This software and all associated documentation files (the "Software") are the
+exclusive intellectual property of CushLabs AI Services.
 
-The Software is provided under a limited, non-exclusive, non-transferable
-license for personal, non-commercial use only. See the End User License
-Agreement (EULA) in docs/legal/EULA.md for complete terms and conditions.
+PERMITTED:
+  - Viewing and reading this code for professional evaluation of the author's work
+  - Referencing this repository in the context of hiring, partnership, or due diligence
+  - Linking to this repository
 
-NO WARRANTY: THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND.
+NOT PERMITTED:
+  - Copying, cloning, forking, or reproducing this code for any purpose other than
+    personal review
+  - Using any portion of this code in your own projects, products, or services,
+    whether commercial or non-commercial
+  - Distributing, sublicensing, or publishing derivative works based on this code
+  - Using this code as a template, boilerplate, or starting point for any project
 
-CUSHLABS.AI
-Email: info@cushlabs.ai
-Website: https://cushlabs.ai
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+OTHER LIABILITY ARISING FROM THE USE OF THIS SOFTWARE.
+
+For licensing inquiries: info@cushlabs.ai
+https://cushlabs.ai
