@@ -35,7 +35,7 @@ dependencies = [
     "pytz>=2024.1",
     "Pillow>=10.0.0",
     "requests>=2.31.0",
-    "twilio>=8.0.0",
+    "twilio>=9.10.4",
     "keyring>=24.0.0",
     "phonenumbers>=8.0.0",
 ]
