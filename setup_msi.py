@@ -106,7 +106,6 @@ build_exe_options = {
         "requests",
         "PIL",
         "pytz",
-        "twilio",
         "keyring",
         "phonenumbers",
         # WinRT for Windows notifications (include all subpackages)
