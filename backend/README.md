@@ -82,15 +82,15 @@ blocking legitimate alerts.
 
 ## Environment Variables
 
-| Variable                         | Description                                                     |
-| -------------------------------- | --------------------------------------------------------------- |
-| TWILIO_SID                       | Twilio Account SID                                              |
-| TWILIO_AUTH_TOKEN                | Twilio Auth Token                                               |
-| TWILIO_WHATSAPP_NUMBER           | Your WhatsApp Business number (+13072842785)                    |
-| API_KEY                          | Secret key for authenticating StockAlert app requests           |
-| UPSTASH_REDIS_REST_URL           | Rate limiting - auto-injected by the Vercel Upstash integration |
-| UPSTASH_REDIS_REST_TOKEN         | Rate limiting - auto-injected by the Vercel Upstash integration |
-| RATE_LIMIT_PER_NUMBER_PER_MINUTE | Optional override, default `10`                                 |
-| RATE_LIMIT_PER_NUMBER_PER_HOUR   | Optional override, default `60`                                 |
-| RATE_LIMIT_GLOBAL_PER_MINUTE     | Optional override, default `100`                                |
-| RATE_LIMIT_GLOBAL_PER_HOUR       | Optional override, default `2000`                               |
+| Variable                         | Description                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------- |
+| TWILIO_SID                       | Twilio Account SID                                                                          |
+| TWILIO_AUTH_TOKEN                | Twilio Auth Token                                                                           |
+| TWILIO_WHATSAPP_NUMBER           | Your WhatsApp Business number (+13072842785)                                                |
+| API_KEY                          | Secret key for authenticating StockAlert app requests                                       |
+| KV_REST_API_URL                  | Rate limiting - auto-injected by the Vercel Upstash integration (legacy "Vercel KV" naming) |
+| KV_REST_API_TOKEN                | Rate limiting - auto-injected by the Vercel Upstash integration (legacy "Vercel KV" naming) |
+| RATE_LIMIT_PER_NUMBER_PER_MINUTE | Optional override, default `10`                                                             |
+| RATE_LIMIT_PER_NUMBER_PER_HOUR   | Optional override, default `60`                                                             |
+| RATE_LIMIT_GLOBAL_PER_MINUTE     | Optional override, default `100`                                                            |
+| RATE_LIMIT_GLOBAL_PER_HOUR       | Optional override, default `2000`                                                           |
