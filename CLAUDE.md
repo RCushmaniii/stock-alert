@@ -139,9 +139,11 @@ limits via Upstash Redis (REST API, no SDK):
   `RATE_LIMIT_PER_NUMBER_PER_HOUR`)
 - Global (all traffic on the endpoint): 100/minute, 2000/hour (env:
   `RATE_LIMIT_GLOBAL_PER_MINUTE`, `RATE_LIMIT_GLOBAL_PER_HOUR`)
-- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are auto-injected by
-  the Vercel Upstash marketplace integration once a database is linked to
-  the `stockalert-api` Vercel project
+- `KV_REST_API_URL` / `KV_REST_API_TOKEN` are auto-injected by the Vercel
+  Upstash marketplace integration once a database is linked to the
+  `stockalert-api` Vercel project (Vercel uses the legacy "Vercel KV"
+  naming, not the raw `UPSTASH_REDIS_REST_*` names - code checks both,
+  preferring `KV_REST_API_*`)
 - **Fails open**: if Upstash isn't configured or unreachable, requests are
   allowed through rather than blocked - a Redis outage should never stop a
   legitimate stock alert

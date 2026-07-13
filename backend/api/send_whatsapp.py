@@ -18,11 +18,13 @@ from http.server import BaseHTTPRequestHandler
 
 from twilio.rest import Client
 
-# Rate limiting (Upstash Redis REST API, no SDK). UPSTASH_REDIS_REST_URL
-# and UPSTASH_REDIS_REST_TOKEN are auto-injected by the Vercel Upstash
-# marketplace integration once a database is linked to this project.
-UPSTASH_REDIS_REST_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
-UPSTASH_REDIS_REST_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+# Rate limiting (Upstash Redis REST API, no SDK). The Vercel Upstash
+# marketplace integration auto-injects these as KV_REST_API_URL /
+# KV_REST_API_TOKEN (legacy "Vercel KV" naming, verified against this
+# project's actual env vars) - not the raw UPSTASH_REDIS_REST_* names.
+# Falls back to the raw names in case a future setup injects those instead.
+UPSTASH_REDIS_REST_URL = os.environ.get("KV_REST_API_URL") or os.environ.get("UPSTASH_REDIS_REST_URL")
+UPSTASH_REDIS_REST_TOKEN = os.environ.get("KV_REST_API_TOKEN") or os.environ.get("UPSTASH_REDIS_REST_TOKEN")
 
 RATE_LIMIT_PER_NUMBER_PER_MINUTE = int(os.environ.get("RATE_LIMIT_PER_NUMBER_PER_MINUTE", "10"))
 RATE_LIMIT_PER_NUMBER_PER_HOUR = int(os.environ.get("RATE_LIMIT_PER_NUMBER_PER_HOUR", "60"))
