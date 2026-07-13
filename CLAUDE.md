@@ -1,7 +1,8 @@
-# StockAlert v3.0 - AI Assistant Guidelines
+# StockAlert v4.1.0 - AI Assistant Guidelines
 
 > **IMPORTANT: DO NOT ASSIGN DEVELOPER WORK TO THE USER!**
 > The user is the project manager, NOT a developer. If you need to:
+>
 > - Update code (frontend, backend, Vercel, etc.) → DO IT YOURSELF
 > - Push to git → DO IT YOURSELF
 > - Deploy to Vercel → Push to git, it auto-deploys from `backend/` folder
@@ -12,6 +13,7 @@
 
 > **IMPORTANT: Be a PROACTIVE Product Advisor!**
 > Don't just implement what's asked - think like a product designer:
+>
 > - **Simplify UX**: If a feature adds complexity users don't need, suggest removing it
 > - **"It Just Works"**: Modern apps don't ask users to configure things that should be automatic
 > - **Fewer Choices = Better**: Don't expose settings users shouldn't need to think about
@@ -19,6 +21,7 @@
 > - **Think Like a User**: Would your mom understand this UI? If not, simplify it
 >
 > Examples of good advice:
+>
 > - "Do users really need a Start/Stop button, or should the service just always run?"
 > - "This setting adds complexity - can we just pick a sensible default?"
 > - "Instead of 3 options, what if we just did the right thing automatically?"
@@ -29,6 +32,7 @@
 ## Quick Reference (from Lessons Learned)
 
 ### Build Commands
+
 ```bash
 # Kill running app first (use // for Windows flags in Git Bash)
 taskkill //F //IM StockAlert.exe
@@ -41,12 +45,15 @@ python setup_msi.py build_exe
 ```
 
 ### Inno Setup Location (for creating installers)
+
 ```
 %LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe
 ```
+
 **NOT** in Program Files - it's in the user's AppData folder!
 
 ### Key Gotchas
+
 - **Config Location**: Stored in `%APPDATA%\StockAlert\config.json` (persists across rebuilds!)
 - **Rate Limiter**: Must be a singleton shared across all FinnhubProvider instances
 - **Startup Dialogs**: Must show AFTER UI is created, via QTimer.singleShot()
@@ -60,11 +67,13 @@ python setup_msi.py build_exe
 ## WhatsApp/SMS Backend (Vercel)
 
 ### Vercel Project
+
 - **Project URL**: https://vercel.com/rcushmaniii-projects/stockalert-api
 - **API Endpoint**: `https://stockalert-api.vercel.app/api/send_whatsapp` (UNDERSCORE, not hyphen!)
 - **Source Code**: `backend/api/send_whatsapp.py` (auto-deploys on git push)
 
 ### Vercel Deployment (CLI Required)
+
 - The `backend/` folder is NOT auto-deployed via Git
 - **To deploy**: `cd backend && vercel --prod`
 - Vercel CLI must be installed and authenticated
@@ -72,25 +81,29 @@ python setup_msi.py build_exe
 - Production URL: `https://stockalert-api.vercel.app`
 
 ### Twilio WhatsApp Configuration
+
 - **Account SID**: (stored in Vercel environment variables)
 - **WhatsApp Number**: (stored in Vercel environment variables)
 
 **Templates:**
 
-| Template | SID | Variables | Purpose |
-|----------|-----|-----------|---------|
-| Price Alert | `HX138b713346901520a4a6d48e21ec3e68` | `{{1}}`=symbol, `{{2}}`=price, `{{3}}`=direction, `{{4}}`=threshold | Alert when price crosses threshold |
-| Opt-In | `HX777abe17f68d1daf042e9771c7c96451` | `{{1}}`=stock_count | Request consent when user enables WhatsApp |
+| Template    | SID                                  | Variables                                                           | Purpose                                    |
+| ----------- | ------------------------------------ | ------------------------------------------------------------------- | ------------------------------------------ |
+| Price Alert | `HX138b713346901520a4a6d48e21ec3e68` | `{{1}}`=symbol, `{{2}}`=price, `{{3}}`=direction, `{{4}}`=threshold | Alert when price crosses threshold         |
+| Opt-In      | `HX777abe17f68d1daf042e9771c7c96451` | `{{1}}`=stock_count                                                 | Request consent when user enables WhatsApp |
 
 **Opt-In Flow:**
+
 - Sent automatically when user first enables WhatsApp alerts
 - Shows "Yes, enable alerts" / "No thanks" buttons
 - Tracked via `whatsapp_optin_sent` config flag (won't re-send)
 
 ### IMPORTANT: Templates Required!
+
 WhatsApp Business numbers CANNOT send freeform messages. You MUST use `template_data`, not `message`. Freeform only works if user messaged you in last 24 hours.
 
 ### API Request Format
+
 ```json
 POST /api/send_whatsapp
 {
@@ -98,15 +111,19 @@ POST /api/send_whatsapp
   "template_data": {"1": "AAPL", "2": "182.50", "3": "above", "4": "180.00"}
 }
 ```
+
 **Note**: Endpoint is `send_whatsapp` (underscore), NOT `send-whatsapp` (hyphen)!
 
 ### Desktop App Integration
+
 - `src/stockalert/core/twilio_service.py` calls the Vercel API
 - Does NOT use Twilio SDK directly (avoids bundling credentials in exe)
 - Phone numbers are validated via `phone_utils.py` using `phonenumbers` library
 
 ### API Key Authentication (Internal)
+
 The WhatsApp backend requires an API key for authentication. This is **completely invisible to users**:
+
 - The API key is **embedded in the app** (XOR-obfuscated in `api_key_manager.py`)
 - On startup, `provision_stockalert_api_key()` auto-stores it in Windows Credential Manager
 - Users just toggle "Enable WhatsApp" - no key entry required
@@ -114,7 +131,9 @@ The WhatsApp backend requires an API key for authentication. This is **completel
 - **DO NOT** expose this key to users or ask them to configure it
 
 ### Mexican Phone Numbers
+
 Mexican mobile numbers are special:
+
 - Standard format: `+52` + 10 digits (e.g., `+523315590572`)
 - WhatsApp format: `+521` + 10 digits (e.g., `+5213315590572`) - needs the "1" prefix
 - The `phonenumbers` library may reject +521 as "too long" - we handle this specially in `phone_utils.py`
@@ -157,13 +176,16 @@ src/stockalert/
 ## Code Standards
 
 ### Type Hints
+
 - All functions must have complete type annotations
 - Use `from __future__ import annotations` in all modules
 - Run `mypy src/` to verify - must pass with zero errors
 
 ### Docstrings
+
 - All public classes and functions need docstrings
 - Use Google-style docstrings:
+
 ```python
 def fetch_price(symbol: str, timeout: float = 5.0) -> float | None:
     """Fetch current stock price from Finnhub API.
@@ -181,6 +203,7 @@ def fetch_price(symbol: str, timeout: float = 5.0) -> float | None:
 ```
 
 ### Naming Conventions
+
 - Classes: `PascalCase`
 - Functions/methods: `snake_case`
 - Constants: `UPPER_SNAKE_CASE`
@@ -188,6 +211,7 @@ def fetch_price(symbol: str, timeout: float = 5.0) -> float | None:
 - Translation keys: `category.subcategory.name` (e.g., `alerts.high.title`)
 
 ### Error Handling
+
 - Never use bare `except:`
 - Log exceptions with `logger.exception()` for stack traces
 - Use custom exceptions for domain-specific errors
@@ -196,19 +220,25 @@ def fetch_price(symbol: str, timeout: float = 5.0) -> float | None:
 ## Key Components
 
 ### Rate Limiter (`api/rate_limiter.py`)
+
 Token bucket algorithm for Finnhub's 60 calls/minute limit:
+
 - Allows bursts up to 10 calls
 - Refills at 1 token/second
 - Use `await limiter.acquire()` before each API call
 
 ### Translator (`i18n/translator.py`)
+
 Simple JSON-based translation system:
+
 - Load with `translator.set_language("es")`
 - Get strings with `_("alerts.high.title")` shorthand
 - Supports runtime language switching
 
 ### Config Manager (`core/config.py`)
+
 JSON configuration with validation:
+
 - Schema validation on load
 - Migration support for older configs
 - Thread-safe read/write operations
@@ -216,6 +246,7 @@ JSON configuration with validation:
 ## Common Tasks
 
 ### Adding a New Translation String
+
 1. Add to `src/stockalert/i18n/locales/en.json`:
    ```json
    { "category": { "new_key": "English text" } }
@@ -227,12 +258,14 @@ JSON configuration with validation:
 3. Use in code: `_("category.new_key")`
 
 ### Adding a New Setting
+
 1. Update schema in `core/config.py`
 2. Add default value in `DEFAULT_CONFIG`
 3. Add UI controls in `ui/dialogs/settings_dialog.py`
 4. Add translation keys for labels
 
 ### Adding a New API Provider
+
 1. Create `api/new_provider.py` implementing `BaseProvider`
 2. Implement required methods: `get_price()`, `validate_symbol()`
 3. Add provider option in config schema
@@ -241,6 +274,7 @@ JSON configuration with validation:
 ## Testing
 
 ### Run Tests
+
 ```bash
 # All tests
 pytest
@@ -259,13 +293,17 @@ pytest -m "not slow"
 ```
 
 ### Test Fixtures
+
 Common fixtures in `conftest.py`:
+
 - `mock_finnhub`: Mocked Finnhub client
 - `sample_config`: Valid test configuration
 - `qtbot`: PyQt6 test helper (from pytest-qt)
 
 ### GUI Testing
+
 Use `pytest-qt` for widget testing:
+
 ```python
 def test_add_ticker(qtbot, main_window):
     qtbot.addWidget(main_window)
@@ -276,12 +314,14 @@ def test_add_ticker(qtbot, main_window):
 ## Build & Package
 
 ### Development Install
+
 ```bash
 pip install -e ".[dev]"
 pre-commit install
 ```
 
 ### Build Executable
+
 ```bash
 # Kill any running instance first
 taskkill //F //IM StockAlert.exe
@@ -293,6 +333,7 @@ python setup_msi.py build_exe
 ```
 
 ### Create Installer (Inno Setup)
+
 ```bash
 # Inno Setup is in AppData, NOT Program Files!
 "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer.iss
@@ -301,6 +342,7 @@ python setup_msi.py build_exe
 ```
 
 ### Linting
+
 ```bash
 # Check
 ruff check src/
@@ -314,17 +356,18 @@ ruff format src/
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `FINNHUB_API_KEY` | Yes | Finnhub API key for stock data (user-provided) |
-| `LOG_LEVEL` | No | Logging level (default: INFO) |
-| `DEBUG_MODE` | No | Enable debug features |
+| Variable          | Required | Description                                    |
+| ----------------- | -------- | ---------------------------------------------- |
+| `FINNHUB_API_KEY` | Yes      | Finnhub API key for stock data (user-provided) |
+| `LOG_LEVEL`       | No       | Logging level (default: INFO)                  |
+| `DEBUG_MODE`      | No       | Enable debug features                          |
 
 **Note**: The Finnhub API key is stored in `%APPDATA%\StockAlert\config.json` after user enters it in Settings. No `.env` file is needed for production builds.
 
 ## Dependencies
 
 ### Runtime
+
 - PyQt6: GUI framework
 - finnhub-python: Stock data API
 - python-dotenv: Environment variables
@@ -333,6 +376,7 @@ ruff format src/
 - Pillow: Image processing
 
 ### Development
+
 - pytest, pytest-qt, pytest-cov: Testing
 - ruff: Linting and formatting
 - mypy: Type checking
