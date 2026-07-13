@@ -22,7 +22,7 @@ types-pytz>=2024.1.0
 types-requests>=2.31.0
 
 # Git Hooks
-pre-commit>=3.5.0
+pre-commit>=4.6.0
 
 # Build
 cx-Freeze>=7.2.8
