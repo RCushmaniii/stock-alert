@@ -14,7 +14,7 @@ authors = [
 requires-python = ">=3.10"
 keywords = ["stock", "alert", "monitoring", "windows", "notification", "finnhub"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Win32 (MS Windows)",
     "Intended Audience :: End Users/Desktop",
     "License :: Other/Proprietary License",

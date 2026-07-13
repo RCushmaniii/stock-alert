@@ -16,6 +16,18 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 
+# Rate limiting (Upstash Redis REST API, no SDK - same no-dependency
+# philosophy as the Graph API calls below). UPSTASH_REDIS_REST_URL and
+# UPSTASH_REDIS_REST_TOKEN are auto-injected by the Vercel Upstash
+# marketplace integration once a database is linked to this project.
+UPSTASH_REDIS_REST_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
+UPSTASH_REDIS_REST_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+
+RATE_LIMIT_PER_NUMBER_PER_MINUTE = int(os.environ.get("RATE_LIMIT_PER_NUMBER_PER_MINUTE", "10"))
+RATE_LIMIT_PER_NUMBER_PER_HOUR = int(os.environ.get("RATE_LIMIT_PER_NUMBER_PER_HOUR", "60"))
+RATE_LIMIT_GLOBAL_PER_MINUTE = int(os.environ.get("RATE_LIMIT_GLOBAL_PER_MINUTE", "100"))
+RATE_LIMIT_GLOBAL_PER_HOUR = int(os.environ.get("RATE_LIMIT_GLOBAL_PER_HOUR", "2000"))
+
 # Meta WhatsApp message template names (must match APPROVED templates in
 # WhatsApp Manager for the WABA identified by WHATSAPP_WABA_ID). Language
 # code is fixed per template below; adjust once the real approved templates
@@ -121,6 +133,67 @@ def _sanitize_graph_error(error_body: dict) -> dict:
         "error_subcode": error.get("error_subcode"),
         "message": message,
     }
+
+
+class RateLimitExceeded(Exception):
+    """Raised when a caller has exceeded a configured rate limit window."""
+
+    def __init__(self, retry_after: int):
+        self.retry_after = retry_after
+        super().__init__(f"Rate limit exceeded, retry after {retry_after}s")
+
+
+def _upstash_pipeline(commands: list) -> list:
+    """Run a batch of Redis commands atomically via Upstash's REST pipeline endpoint."""
+    url = f"{UPSTASH_REDIS_REST_URL}/pipeline"
+    data = json.dumps(commands).encode("utf-8")
+    request = urllib.request.Request(url, data=data, method="POST")
+    request.add_header("Authorization", f"Bearer {UPSTASH_REDIS_REST_TOKEN}")
+    request.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(request, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _check_window(key: str, limit: int, window_seconds: int) -> bool:
+    """Increment a fixed-window counter and report whether it's still within limit.
+
+    Uses EXPIRE ... NX so the window starts on the first request into it and
+    isn't extended by later increments within the same window.
+    """
+    results = _upstash_pipeline([
+        ["INCR", key],
+        ["EXPIRE", key, window_seconds, "NX"],
+    ])
+    count = results[0].get("result", 0)
+    return count <= limit
+
+
+def check_rate_limit(recipient: str) -> None:
+    """Enforce per-recipient and global rate limits for the WhatsApp send endpoint.
+
+    Raises RateLimitExceeded if any window is over its limit. Fails open
+    (returns normally) if Upstash isn't configured or unreachable - a Redis
+    outage should never block a legitimate stock alert.
+    """
+    if not UPSTASH_REDIS_REST_URL or not UPSTASH_REDIS_REST_TOKEN:
+        return
+
+    windows = [
+        (f"rl:num:{recipient}:m", RATE_LIMIT_PER_NUMBER_PER_MINUTE, 60),
+        (f"rl:num:{recipient}:h", RATE_LIMIT_PER_NUMBER_PER_HOUR, 3600),
+        ("rl:global:m", RATE_LIMIT_GLOBAL_PER_MINUTE, 60),
+        ("rl:global:h", RATE_LIMIT_GLOBAL_PER_HOUR, 3600),
+    ]
+
+    try:
+        for key, limit, window_seconds in windows:
+            if not _check_window(key, limit, window_seconds):
+                raise RateLimitExceeded(retry_after=window_seconds)
+    except RateLimitExceeded:
+        raise
+    except Exception:
+        # Upstash unreachable/misconfigured - fail open rather than block alerts
+        return
 
 
 def _graph_api_send(payload: dict) -> dict:
@@ -302,6 +375,20 @@ class handler(BaseHTTPRequestHandler):
 
         # Format phone number
         formatted_phone = format_phone_number(phone, country_code)
+
+        # Enforce per-recipient and global rate limits before calling Meta
+        try:
+            check_rate_limit(formatted_phone)
+        except RateLimitExceeded as exc:
+            self.send_response(429)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Retry-After', str(exc.retry_after))
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                'error': 'Rate limit exceeded',
+                'retry_after': exc.retry_after,
+            }).encode())
+            return
 
         # Send message (template takes priority if both provided)
         result = send_whatsapp_message(formatted_phone, message, template_data, template_type)

@@ -74,15 +74,29 @@ The API automatically formats phone numbers for different countries:
 
 For Mexico, the mobile prefix "1" is automatically added.
 
+## Rate Limiting
+
+The send endpoint enforces per-recipient (10/min, 60/hour) and global
+(100/min, 2000/hour) rate limits via Upstash Redis. Exceeding a window
+returns `429` with a `Retry-After` header. If Upstash isn't configured,
+rate limiting fails open (requests are allowed through) rather than
+blocking legitimate alerts.
+
 ## Environment Variables
 
-| Variable                 | Description                                                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| WHATSAPP_TOKEN           | Meta System User access token (never-expiry, `whatsapp_business_messaging` + `whatsapp_business_management` scopes) |
-| WHATSAPP_PHONE_NUMBER_ID | Meta-issued Phone Number ID (not the raw phone number)                                                              |
-| WHATSAPP_WABA_ID         | WhatsApp Business Account ID (used for template management)                                                         |
-| GRAPH_API_VERSION        | Graph API version, e.g. `v21.0`                                                                                     |
-| API_KEY                  | Secret key for authenticating StockAlert app requests                                                               |
+| Variable                         | Description                                                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| WHATSAPP_TOKEN                   | Meta System User access token (never-expiry, `whatsapp_business_messaging` + `whatsapp_business_management` scopes) |
+| WHATSAPP_PHONE_NUMBER_ID         | Meta-issued Phone Number ID (not the raw phone number)                                                              |
+| WHATSAPP_WABA_ID                 | WhatsApp Business Account ID (used for template management)                                                         |
+| GRAPH_API_VERSION                | Graph API version, e.g. `v21.0`                                                                                     |
+| API_KEY                          | Secret key for authenticating StockAlert app requests                                                               |
+| UPSTASH_REDIS_REST_URL           | Rate limiting - auto-injected by the Vercel Upstash integration                                                     |
+| UPSTASH_REDIS_REST_TOKEN         | Rate limiting - auto-injected by the Vercel Upstash integration                                                     |
+| RATE_LIMIT_PER_NUMBER_PER_MINUTE | Optional override, default `10`                                                                                     |
+| RATE_LIMIT_PER_NUMBER_PER_HOUR   | Optional override, default `60`                                                                                     |
+| RATE_LIMIT_GLOBAL_PER_MINUTE     | Optional override, default `100`                                                                                    |
+| RATE_LIMIT_GLOBAL_PER_HOUR       | Optional override, default `2000`                                                                                   |
 
 The underlying phone number (+13072842785) is still purchased/hosted through
 Twilio, but Twilio is no longer in the WhatsApp send path — see

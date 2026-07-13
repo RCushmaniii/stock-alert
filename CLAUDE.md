@@ -146,6 +146,24 @@ The WhatsApp backend requires an API key for authentication. This is **completel
 - The key is set in Vercel as `API_KEY` environment variable
 - **DO NOT** expose this key to users or ask them to configure it
 
+### Rate Limiting
+
+The WhatsApp send endpoint (`backend/api/send_whatsapp.py`) enforces rate
+limits via Upstash Redis (REST API, no SDK - same no-dependency approach as
+the Graph API calls):
+
+- Per-recipient: 10/minute, 60/hour (env: `RATE_LIMIT_PER_NUMBER_PER_MINUTE`,
+  `RATE_LIMIT_PER_NUMBER_PER_HOUR`)
+- Global (all traffic on the endpoint): 100/minute, 2000/hour (env:
+  `RATE_LIMIT_GLOBAL_PER_MINUTE`, `RATE_LIMIT_GLOBAL_PER_HOUR`)
+- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are auto-injected by
+  the Vercel Upstash marketplace integration once a database is linked to
+  the `stockalert-api` Vercel project
+- **Fails open**: if Upstash isn't configured or unreachable, requests are
+  allowed through rather than blocked - a Redis outage should never stop a
+  legitimate stock alert
+- Exceeding a window returns `429` with a `Retry-After` header
+
 ### Mexican Phone Numbers
 
 Mexican mobile numbers are special:
