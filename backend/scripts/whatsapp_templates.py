@@ -19,7 +19,7 @@ STOCK_ALERT_TEMPLATE = {
     "components": [
         {
             "type": "BODY",
-            "text": "StockAlert: {{1}} is now ${{2}}, {{3}} your alert threshold of ${{4}}.",
+            "text": "StockAlert Price Alert: {{1}} is now trading at ${{2}} per share, which is {{3}} the alert threshold of ${{4}} you set in the StockAlert app.",
             "example": {"body_text": [["AAPL", "182.50", "above", "180.00"]]},
         },
     ],
