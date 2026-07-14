@@ -43,7 +43,7 @@ def submit_template(waba_id: str, token: str, template: dict, api_version: str) 
 
 
 def main() -> None:
-    token = os.environ.get("WHATSAPP_TOKEN")
+    token = os.environ.get("WHATSAPP_TOKEN_SYS_USER") or os.environ.get("WHATSAPP_TOKEN")
     waba_id = os.environ.get("WHATSAPP_WABA_ID")
 
     if not token or not waba_id:
