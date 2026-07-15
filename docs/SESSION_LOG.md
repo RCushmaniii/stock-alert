@@ -6,6 +6,41 @@ Entries are newest-first. Each entry documents one Claude Code working session.
 
 <!-- New entries go above this line -->
 
+## Session: 2026-07-15
+
+### Accomplished
+
+- Found and fixed a ~13h production outage: PR #18's merge resolution had shipped the old Twilio `send_whatsapp.py` back to prod (import crash, HTTP 500 on every request). Restored the Meta implementation + kept `KV_REST_API_*` env naming (PR #19); verified live.
+- Rotated the Meta System User token after transcript exposure: revoke-all → fresh never-expiry token → Vercel prod env → redeploy → verified end-to-end (Meta's "Revoke tokens" is all-or-nothing per System User; revoke FIRST, then generate).
+- Security sweep: git history clean (no secrets ever committed); confirmed the three externally-rolled tokens are all Cloudflare — zero impact on this repo's stack.
+- Display name "CushLabs" APPROVED (`name_status: APPROVED` via API); desktop-app alerts confirmed arriving organically.
+- Closed the Development-vs-Live question empirically: dev-mode app delivered an approved template to a no-role recipient (+521 33 2938 1425, invite still pending). Live mode only needed for future inbound webhooks.
+- Corrected `cushlabs-whatsapp/docs/WHATSAPP_SETUP.md` §8 + troubleshooting (unpublished-app delivery claim disproven; "accepted but not delivered" = free-form outside 24h window).
+- Added 12-lesson "WhatsApp Twilio→Meta Migration (July 2026)" section to `docs/LESSONS_LEARNED.md`.
+
+### Decisions Made
+
+- App stays in Development mode permanently for own-WABA outbound use: the Live toggle gates public OAuth/webhooks, not server-to-server sending.
+- Future CushLabs products: reuse number + WABA + app, but one System User per product (blast-radius isolation for token rotation).
+- Token values must never touch watched files during a session — paste into Vercel dashboard / edit `.env.local` only outside active sessions.
+
+### Immediate Next Steps
+
+- [ ] Retry "Rank It Better" WABA deletion after Twilio's billing cycle settles the BSP-era balance (early August).
+- [ ] Check WhatsApp Manager → number → Automations tab for a no-code away-message ("replies not monitored") before real users onboard.
+- [ ] Add a "replies aren't monitored" line to `whatsapp_optin` next time templates are revised (edit triggers re-review).
+
+### Technical Debt
+
+- No inbound webhook: replies/button-taps (incl. opt-in buttons) go unheard; delivery-failure callbacks invisible. Required before real users.
+- Old expired Quickstart token still sits on line 1 of `backend/.env.local` (`WHATSAPP_TOKEN`) — harmless, delete anytime.
+
+### Open Questions / Blockers
+
+- cushlabs-investment-model auth failure + Cloudflare token re-wiring — with the parallel agent (not this repo's stack).
+
+---
+
 ## Session: 2026-07-14
 
 ### Accomplished
