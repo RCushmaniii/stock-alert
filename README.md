@@ -11,19 +11,22 @@
 ## Features
 
 ### Core Functionality
-- **Multi-Stock Monitoring** - Track unlimited stocks with individual high/low thresholds
+
+- **Multi-Stock Monitoring** - Track up to 15 stocks (free tier) with individual high/low thresholds
 - **Multi-Channel Alerts** - Windows notifications, WhatsApp, and email (coming soon)
 - **Background Service** - Continues monitoring even after closing the GUI
 - **Bilingual Support** - Full English and Spanish interface
 - **Professional GUI** - Modern PyQt6 interface with dark/light themes
 
 ### Background Service Architecture
+
 - **24/7 Monitoring** - Service runs independently of the GUI
 - **Auto-Reload Config** - Changes are picked up without restart
 - **Graceful Shutdown** - Clean stop via GUI or command line
 - **Market Hours Aware** - Only alerts during trading hours
 
 ### Alert Channels
+
 - **Windows Toast Notifications** - Click to view stock chart
 - **WhatsApp Alerts** - Via Twilio integration (requires account)
 - **Email Alerts** - Coming soon
@@ -39,18 +42,21 @@
 ### Installation
 
 1. **Clone the repository:**
+
    ```powershell
    git clone https://github.com/RCushmaniii/stock-alert.git
    cd stock-alert
    ```
 
 2. **Create and activate virtual environment:**
+
    ```powershell
    python -m venv venv
    .\venv\Scripts\Activate.ps1
    ```
 
 3. **Install dependencies:**
+
    ```powershell
    pip install -e ".[dev]"
    ```
@@ -64,18 +70,21 @@
 ### Usage
 
 #### Run the GUI Application
+
 ```powershell
 cd src
 python -m stockalert
 ```
 
 #### Run the Background Service (Headless)
+
 ```powershell
 cd src
 python -m stockalert.service
 ```
 
 The GUI provides:
+
 - **Profile Tab** - Set your name, email, and phone for alerts
 - **Settings Tab** - Configure check intervals, cooldown, alert channels
 - **Tickers Tab** - Add/edit/delete stocks with price thresholds
@@ -92,6 +101,7 @@ The background service allows monitoring to continue even when the GUI is closed
 5. Close the GUI - monitoring continues!
 
 **Command Line Options:**
+
 ```powershell
 # Run in foreground (for debugging)
 python -m stockalert.service --debug
@@ -191,17 +201,20 @@ src/stockalert/
 ## Development
 
 ### Running Tests
+
 ```powershell
 pytest tests/ -v
 ```
 
 ### Code Quality
+
 ```powershell
 ruff check src/
 mypy src/
 ```
 
 ### Building MSI Installer
+
 ```powershell
 pip install -e ".[build]"
 python setup.py bdist_msi
@@ -210,17 +223,20 @@ python setup.py bdist_msi
 ## Troubleshooting
 
 ### No alerts appearing?
+
 1. Check Windows Settings > Notifications > StockAlert is enabled
 2. Verify your Finnhub API key is set in `.env`
 3. Confirm thresholds are set (price must cross threshold)
 4. Check cooldown period hasn't blocked repeated alerts
 
 ### WhatsApp not working?
+
 1. Ensure Twilio credentials are set in `.env`
 2. You must first send "join <sandbox-keyword>" to Twilio's WhatsApp number
 3. Check your phone number includes country code (e.g., +1)
 
 ### Service won't start?
+
 1. Check if another instance is already running
 2. View logs in `stockalert_service.log`
 3. Try running with `--debug` flag
@@ -229,13 +245,13 @@ python setup.py bdist_msi
 
 Detailed documentation is available in the `docs/` folder:
 
-| Folder | Contents |
-|--------|----------|
-| `docs/guides/` | Build guides, MSI creation, code signing |
-| `docs/developer/` | Architecture, API setup, contributing |
-| `docs/user/` | User guides (English & Spanish) |
-| `docs/legal/` | EULA, privacy policy, licenses |
-| `docs/archive/` | Legacy v2.x documentation |
+| Folder            | Contents                                 |
+| ----------------- | ---------------------------------------- |
+| `docs/guides/`    | Build guides, MSI creation, code signing |
+| `docs/developer/` | Architecture, API setup, contributing    |
+| `docs/user/`      | User guides (English & Spanish)          |
+| `docs/legal/`     | EULA, privacy policy, licenses           |
+| `docs/archive/`   | Legacy v2.x documentation                |
 
 ## License
 

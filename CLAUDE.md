@@ -1,4 +1,4 @@
-# StockAlert v3.0 - AI Assistant Guidelines
+# StockAlert v4.1.0 - AI Assistant Guidelines
 
 > **IMPORTANT: DO NOT ASSIGN DEVELOPER WORK TO THE USER!**
 > The user is the project manager, NOT a developer. If you need to:
@@ -93,7 +93,9 @@ python setup_msi.py build_exe
 ### Meta WhatsApp Cloud API Configuration
 
 - **Sender number**: +13072842785 (hosted by Twilio, registered into CushLabs' own WABA — not a Twilio-managed WhatsApp Sender)
-- **Credentials** (Vercel env vars): `WHATSAPP_TOKEN` (System User, never-expiry), `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_WABA_ID`, `GRAPH_API_VERSION` (pin `v21.0`)
+- **WABA**: CushLabs Notifications — `1669695934130784` (fresh WABA created 2026-07-14 after the legacy "Rank It Better" WABA proved unusable for direct Cloud API sends — persistent #200 errors with fully correct config; see `operating-system/cushlabs/whatsapp-infrastructure.md`)
+- **Phone Number ID**: `1203172156219078` (changed when the number moved WABAs)
+- **Credentials** (Vercel env vars): `WHATSAPP_TOKEN` (System User, never-expiry), `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_WABA_ID`, `GRAPH_API_VERSION` (pin `v25.0`)
 - Send path calls `POST https://graph.facebook.com/{GRAPH_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages` directly via stdlib `urllib` — no SDK dependency
 
 **Templates:**
@@ -107,7 +109,7 @@ Definitions live in `backend/scripts/whatsapp_templates.py`; submit via
 `backend/scripts/submit_templates.py`, check approval via
 `backend/scripts/template_status.py`. Both must be **APPROVED** in Meta's
 WhatsApp Manager before they'll send — this replaces the old Twilio Content
-Template SIDs (`HX138b713346901520a4a6d48e21ec3e68`, `HX777abe17f68d1daf042e9771c7c96451`), which are retired once migration completes.
+Template SIDs (`HX138b713346901520a4a6d48e21ec3e68`, `HX777abe17f68d1daf042e9771c7c96451`), which are now retired.
 
 **Opt-In Flow:**
 
@@ -156,9 +158,11 @@ the Graph API calls):
   `RATE_LIMIT_PER_NUMBER_PER_HOUR`)
 - Global (all traffic on the endpoint): 100/minute, 2000/hour (env:
   `RATE_LIMIT_GLOBAL_PER_MINUTE`, `RATE_LIMIT_GLOBAL_PER_HOUR`)
-- `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` are auto-injected by
-  the Vercel Upstash marketplace integration once a database is linked to
-  the `stockalert-api` Vercel project
+- `KV_REST_API_URL` / `KV_REST_API_TOKEN` are auto-injected by the Vercel
+  Upstash marketplace integration once a database is linked to the
+  `stockalert-api` Vercel project (Vercel uses the legacy "Vercel KV"
+  naming, not the raw `UPSTASH_REDIS_REST_*` names - code checks both,
+  preferring `KV_REST_API_*`)
 - **Fails open**: if Upstash isn't configured or unreachable, requests are
   allowed through rather than blocked - a Redis outage should never stop a
   legitimate stock alert

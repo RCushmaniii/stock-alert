@@ -89,10 +89,10 @@ blocking legitimate alerts.
 | WHATSAPP_TOKEN                   | Meta System User access token (never-expiry, `whatsapp_business_messaging` + `whatsapp_business_management` scopes) |
 | WHATSAPP_PHONE_NUMBER_ID         | Meta-issued Phone Number ID (not the raw phone number)                                                              |
 | WHATSAPP_WABA_ID                 | WhatsApp Business Account ID (used for template management)                                                         |
-| GRAPH_API_VERSION                | Graph API version, e.g. `v21.0`                                                                                     |
+| GRAPH_API_VERSION                | Graph API version, e.g. `v25.0`                                                                                     |
 | API_KEY                          | Secret key for authenticating StockAlert app requests                                                               |
-| UPSTASH_REDIS_REST_URL           | Rate limiting - auto-injected by the Vercel Upstash integration                                                     |
-| UPSTASH_REDIS_REST_TOKEN         | Rate limiting - auto-injected by the Vercel Upstash integration                                                     |
+| KV_REST_API_URL                  | Rate limiting - auto-injected by the Vercel Upstash integration (legacy "Vercel KV" naming)                         |
+| KV_REST_API_TOKEN                | Rate limiting - auto-injected by the Vercel Upstash integration (legacy "Vercel KV" naming)                         |
 | RATE_LIMIT_PER_NUMBER_PER_MINUTE | Optional override, default `10`                                                                                     |
 | RATE_LIMIT_PER_NUMBER_PER_HOUR   | Optional override, default `60`                                                                                     |
 | RATE_LIMIT_GLOBAL_PER_MINUTE     | Optional override, default `100`                                                                                    |

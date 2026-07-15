@@ -1,8 +1,8 @@
 """
 StockAlert WhatsApp Notification API
 
-Serverless function to send WhatsApp messages via Meta's WhatsApp Cloud API
-(Graph API), called directly — no BSP/SDK in the send path. Deploy to Vercel.
+Simple serverless function to send WhatsApp messages via Twilio.
+Deploy to Vercel, Cloudflare Workers, or AWS Lambda.
 
 Supports both:
 - Template messages (for business-initiated alerts)
@@ -16,26 +16,86 @@ import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler
 
-# Rate limiting (Upstash Redis REST API, no SDK - same no-dependency
-# philosophy as the Graph API calls below). UPSTASH_REDIS_REST_URL and
-# UPSTASH_REDIS_REST_TOKEN are auto-injected by the Vercel Upstash
-# marketplace integration once a database is linked to this project.
-UPSTASH_REDIS_REST_URL = os.environ.get("UPSTASH_REDIS_REST_URL")
-UPSTASH_REDIS_REST_TOKEN = os.environ.get("UPSTASH_REDIS_REST_TOKEN")
+from twilio.rest import Client
+
+# Rate limiting (Upstash Redis REST API, no SDK). The Vercel Upstash
+# marketplace integration auto-injects these as KV_REST_API_URL /
+# KV_REST_API_TOKEN (legacy "Vercel KV" naming, verified against this
+# project's actual env vars) - not the raw UPSTASH_REDIS_REST_* names.
+# Falls back to the raw names in case a future setup injects those instead.
+UPSTASH_REDIS_REST_URL = os.environ.get("KV_REST_API_URL") or os.environ.get("UPSTASH_REDIS_REST_URL")
+UPSTASH_REDIS_REST_TOKEN = os.environ.get("KV_REST_API_TOKEN") or os.environ.get("UPSTASH_REDIS_REST_TOKEN")
 
 RATE_LIMIT_PER_NUMBER_PER_MINUTE = int(os.environ.get("RATE_LIMIT_PER_NUMBER_PER_MINUTE", "10"))
 RATE_LIMIT_PER_NUMBER_PER_HOUR = int(os.environ.get("RATE_LIMIT_PER_NUMBER_PER_HOUR", "60"))
 RATE_LIMIT_GLOBAL_PER_MINUTE = int(os.environ.get("RATE_LIMIT_GLOBAL_PER_MINUTE", "100"))
 RATE_LIMIT_GLOBAL_PER_HOUR = int(os.environ.get("RATE_LIMIT_GLOBAL_PER_HOUR", "2000"))
 
-# Meta WhatsApp message template names (must match APPROVED templates in
-# WhatsApp Manager for the WABA identified by WHATSAPP_WABA_ID). Language
-# code is fixed per template below; adjust once the real approved templates
-# are confirmed.
-STOCK_ALERT_TEMPLATE_NAME = "stock_price_alert"
-STOCK_ALERT_TEMPLATE_LANGUAGE = "en_US"
-OPTIN_TEMPLATE_NAME = "whatsapp_optin"
-OPTIN_TEMPLATE_LANGUAGE = "en_US"
+
+class RateLimitExceeded(Exception):
+    """Raised when a caller has exceeded a configured rate limit window."""
+
+    def __init__(self, retry_after: int):
+        self.retry_after = retry_after
+        super().__init__(f"Rate limit exceeded, retry after {retry_after}s")
+
+
+def _upstash_pipeline(commands: list) -> list:
+    """Run a batch of Redis commands atomically via Upstash's REST pipeline endpoint."""
+    url = f"{UPSTASH_REDIS_REST_URL}/pipeline"
+    data = json.dumps(commands).encode("utf-8")
+    request = urllib.request.Request(url, data=data, method="POST")
+    request.add_header("Authorization", f"Bearer {UPSTASH_REDIS_REST_TOKEN}")
+    request.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(request, timeout=5) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _check_window(key: str, limit: int, window_seconds: int) -> bool:
+    """Increment a fixed-window counter and report whether it's still within limit.
+
+    Uses EXPIRE ... NX so the window starts on the first request into it and
+    isn't extended by later increments within the same window.
+    """
+    results = _upstash_pipeline([
+        ["INCR", key],
+        ["EXPIRE", key, window_seconds, "NX"],
+    ])
+    count = results[0].get("result", 0)
+    return count <= limit
+
+
+def check_rate_limit(recipient: str) -> None:
+    """Enforce per-recipient and global rate limits for the WhatsApp send endpoint.
+
+    Raises RateLimitExceeded if any window is over its limit. Fails open
+    (returns normally) if Upstash isn't configured or unreachable - a Redis
+    outage should never block a legitimate stock alert.
+    """
+    if not UPSTASH_REDIS_REST_URL or not UPSTASH_REDIS_REST_TOKEN:
+        return
+
+    windows = [
+        (f"rl:num:{recipient}:m", RATE_LIMIT_PER_NUMBER_PER_MINUTE, 60),
+        (f"rl:num:{recipient}:h", RATE_LIMIT_PER_NUMBER_PER_HOUR, 3600),
+        ("rl:global:m", RATE_LIMIT_GLOBAL_PER_MINUTE, 60),
+        ("rl:global:h", RATE_LIMIT_GLOBAL_PER_HOUR, 3600),
+    ]
+
+    try:
+        for key, limit, window_seconds in windows:
+            if not _check_window(key, limit, window_seconds):
+                raise RateLimitExceeded(retry_after=window_seconds)
+    except RateLimitExceeded:
+        raise
+    except Exception:
+        # Upstash unreachable/misconfigured - fail open rather than block alerts
+        return
+
+
+# Content Template SIDs
+STOCK_ALERT_TEMPLATE_SID = "HX138b713346901520a4a6d48e21ec3e68"  # ai_stock_price_alert_02
+OPTIN_TEMPLATE_SID = os.environ.get('TWILIO_OPTIN_SID', 'HX777abe17f68d1daf042e9771c7c96451')
 
 # Phone number formatting patterns by country
 COUNTRY_FORMATS = {
@@ -114,198 +174,84 @@ def format_phone_number(phone: str, country_code: str = None) -> str:
         return f'+{cleaned}'
 
 
-def _sanitize_graph_error(error_body: dict) -> dict:
-    """Strip anything from a Graph API error that could echo back the access token.
-
-    Meta's Graph API has been observed echoing the raw access token inside
-    error.message on "malformed token" errors. Never surface that verbatim.
-    """
-    error = error_body.get("error", {}) if isinstance(error_body, dict) else {}
-    message = str(error.get("message", "Unknown error"))
-
-    token = os.environ.get("WHATSAPP_TOKEN")
-    if token:
-        message = message.replace(token, "[REDACTED]")
-
-    return {
-        "code": error.get("code"),
-        "type": error.get("type"),
-        "error_subcode": error.get("error_subcode"),
-        "message": message,
-    }
-
-
-class RateLimitExceeded(Exception):
-    """Raised when a caller has exceeded a configured rate limit window."""
-
-    def __init__(self, retry_after: int):
-        self.retry_after = retry_after
-        super().__init__(f"Rate limit exceeded, retry after {retry_after}s")
-
-
-def _upstash_pipeline(commands: list) -> list:
-    """Run a batch of Redis commands atomically via Upstash's REST pipeline endpoint."""
-    url = f"{UPSTASH_REDIS_REST_URL}/pipeline"
-    data = json.dumps(commands).encode("utf-8")
-    request = urllib.request.Request(url, data=data, method="POST")
-    request.add_header("Authorization", f"Bearer {UPSTASH_REDIS_REST_TOKEN}")
-    request.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(request, timeout=5) as response:
-        return json.loads(response.read().decode("utf-8"))
-
-
-def _check_window(key: str, limit: int, window_seconds: int) -> bool:
-    """Increment a fixed-window counter and report whether it's still within limit.
-
-    Uses EXPIRE ... NX so the window starts on the first request into it and
-    isn't extended by later increments within the same window.
-    """
-    results = _upstash_pipeline([
-        ["INCR", key],
-        ["EXPIRE", key, window_seconds, "NX"],
-    ])
-    count = results[0].get("result", 0)
-    return count <= limit
-
-
-def check_rate_limit(recipient: str) -> None:
-    """Enforce per-recipient and global rate limits for the WhatsApp send endpoint.
-
-    Raises RateLimitExceeded if any window is over its limit. Fails open
-    (returns normally) if Upstash isn't configured or unreachable - a Redis
-    outage should never block a legitimate stock alert.
-    """
-    if not UPSTASH_REDIS_REST_URL or not UPSTASH_REDIS_REST_TOKEN:
-        return
-
-    windows = [
-        (f"rl:num:{recipient}:m", RATE_LIMIT_PER_NUMBER_PER_MINUTE, 60),
-        (f"rl:num:{recipient}:h", RATE_LIMIT_PER_NUMBER_PER_HOUR, 3600),
-        ("rl:global:m", RATE_LIMIT_GLOBAL_PER_MINUTE, 60),
-        ("rl:global:h", RATE_LIMIT_GLOBAL_PER_HOUR, 3600),
-    ]
-
-    try:
-        for key, limit, window_seconds in windows:
-            if not _check_window(key, limit, window_seconds):
-                raise RateLimitExceeded(retry_after=window_seconds)
-    except RateLimitExceeded:
-        raise
-    except Exception:
-        # Upstash unreachable/misconfigured - fail open rather than block alerts
-        return
-
-
-def _graph_api_send(payload: dict) -> dict:
-    """POST a message payload to the Meta WhatsApp Cloud API Send endpoint."""
-    token = os.environ.get("WHATSAPP_TOKEN")
-    phone_number_id = os.environ.get("WHATSAPP_PHONE_NUMBER_ID")
-    api_version = os.environ.get("GRAPH_API_VERSION", "v21.0")
-
-    url = f"https://graph.facebook.com/{api_version}/{phone_number_id}/messages"
-    data = json.dumps(payload).encode("utf-8")
-
-    request = urllib.request.Request(url, data=data, method="POST")
-    request.add_header("Authorization", f"Bearer {token}")
-    request.add_header("Content-Type", "application/json")
-
-    try:
-        with urllib.request.urlopen(request, timeout=10) as response:
-            body = json.loads(response.read().decode("utf-8"))
-            return {"success": True, "body": body}
-    except urllib.error.HTTPError as exc:
-        raw_body = exc.read().decode("utf-8")
-        error_body = json.loads(raw_body) if raw_body else {}
-        return {"success": False, "error": _sanitize_graph_error(error_body)}
-    except urllib.error.URLError as exc:
-        return {"success": False, "error": {"message": f"Network error: {exc.reason}"}}
-
-
 def send_whatsapp_message(to_number: str, message: str = None, template_data: dict = None, template_type: str = "alert") -> dict:
     """
-    Send a WhatsApp message via Meta's WhatsApp Cloud API.
+    Send a WhatsApp message via Twilio.
 
     Args:
-        to_number: Recipient phone number (E.164 format, with leading +)
+        to_number: Recipient phone number (E.164 format)
         message: Message text (for free-form/session messages)
         template_data: Dict with template variables
         template_type: "alert" for price alerts, "optin" for opt-in message
 
     Returns:
-        dict with success status and message id or error
+        dict with success status and message SID or error
     """
-    if not all([os.environ.get('WHATSAPP_TOKEN'), os.environ.get('WHATSAPP_PHONE_NUMBER_ID')]):
+    account_sid = os.environ.get('TWILIO_SID')
+    auth_token = os.environ.get('TWILIO_AUTH_TOKEN')
+    whatsapp_number = os.environ.get('TWILIO_WHATSAPP_NUMBER')
+
+    if not all([account_sid, auth_token, whatsapp_number]):
         return {
             'success': False,
-            'error': 'WhatsApp credentials not configured'
+            'error': 'Twilio credentials not configured'
         }
 
-    # Meta's Send API expects the recipient number without the leading '+'
-    to = to_number.lstrip('+')
+    try:
+        client = Client(account_sid, auth_token)
 
-    if template_data:
-        if template_type == "optin":
-            # Opt-in template: {{1}} = stock count
-            body_params = [str(template_data.get("1") or template_data.get("stock_count", "0"))]
-            template_name = OPTIN_TEMPLATE_NAME
-            language_code = OPTIN_TEMPLATE_LANGUAGE
+        # Format numbers for WhatsApp
+        from_whatsapp = f'whatsapp:{whatsapp_number}'
+        to_whatsapp = f'whatsapp:{to_number}'
+
+        # Use template for stock alerts or opt-in, free-form for test messages
+        if template_data:
+            if template_type == "optin":
+                # Opt-in template: {{1}} = stock count
+                content_variables = json.dumps({
+                    "1": str(template_data.get("1") or template_data.get("stock_count", "0")),
+                })
+                template_sid = OPTIN_TEMPLATE_SID
+            else:
+                # Alert template: {{1}}=symbol, {{2}}=price, {{3}}=direction, {{4}}=threshold
+                # Accept both formats: {"1": "AAPL"} or {"symbol": "AAPL"}
+                content_variables = json.dumps({
+                    "1": template_data.get("1") or template_data.get("symbol", "STOCK"),
+                    "2": str(template_data.get("2") or template_data.get("price", "0.00")),
+                    "3": template_data.get("3") or template_data.get("direction", "crossed"),
+                    "4": str(template_data.get("4") or template_data.get("threshold", "0.00")),
+                })
+                template_sid = STOCK_ALERT_TEMPLATE_SID
+
+            message_obj = client.messages.create(
+                content_sid=template_sid,
+                content_variables=content_variables,
+                from_=from_whatsapp,
+                to=to_whatsapp
+            )
         else:
-            # Alert template: {{1}}=symbol, {{2}}=price, {{3}}=direction, {{4}}=threshold
-            body_params = [
-                str(template_data.get("1") or template_data.get("symbol", "STOCK")),
-                str(template_data.get("2") or template_data.get("price", "0.00")),
-                str(template_data.get("3") or template_data.get("direction", "crossed")),
-                str(template_data.get("4") or template_data.get("threshold", "0.00")),
-            ]
-            template_name = STOCK_ALERT_TEMPLATE_NAME
-            language_code = STOCK_ALERT_TEMPLATE_LANGUAGE
+            # Free-form message (only works within 24hr session window)
+            message_obj = client.messages.create(
+                body=message,
+                from_=from_whatsapp,
+                to=to_whatsapp
+            )
 
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": to,
-            "type": "template",
-            "template": {
-                "name": template_name,
-                "language": {"code": language_code},
-                "components": [
-                    {
-                        "type": "body",
-                        "parameters": [{"type": "text", "text": p} for p in body_params],
-                    }
-                ],
-            },
-        }
-    else:
-        # Free-form message (only works within 24hr session window)
-        payload = {
-            "messaging_product": "whatsapp",
-            "to": to,
-            "type": "text",
-            "text": {"body": message},
+        return {
+            'success': True,
+            'message_sid': message_obj.sid,
+            'status': message_obj.status,
+            'to': to_whatsapp,
+            'error_code': message_obj.error_code,
+            'error_message': message_obj.error_message,
         }
 
-    result = _graph_api_send(payload)
-
-    if not result["success"]:
-        error = result["error"]
+    except Exception as e:
         return {
             'success': False,
-            'error': error.get('message', 'Unknown error'),
-            'error_code': error.get('code'),
+            'error': str(e),
+            'error_type': type(e).__name__,
         }
-
-    body = result["body"]
-    messages = body.get("messages", [])
-    message_id = messages[0]["id"] if messages else None
-
-    return {
-        'success': True,
-        'message_sid': message_id,
-        'status': 'accepted',
-        'to': f'whatsapp:{to_number}',
-        'error_code': None,
-        'error_message': None,
-    }
 
 
 class handler(BaseHTTPRequestHandler):
@@ -376,7 +322,7 @@ class handler(BaseHTTPRequestHandler):
         # Format phone number
         formatted_phone = format_phone_number(phone, country_code)
 
-        # Enforce per-recipient and global rate limits before calling Meta
+        # Enforce per-recipient and global rate limits before calling Twilio
         try:
             check_rate_limit(formatted_phone)
         except RateLimitExceeded as exc:
