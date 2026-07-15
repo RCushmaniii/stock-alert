@@ -1,1 +1,3 @@
-twilio>=8.0.0
+# StockAlert WhatsApp backend — no third-party dependencies.
+# Sending goes through Meta's WhatsApp Cloud API (Graph API) directly via
+# Python's stdlib urllib — no BSP SDK needed.

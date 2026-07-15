@@ -1,6 +1,7 @@
 # StockAlert Notification Backend
 
-Simple serverless API for sending WhatsApp notifications via Twilio.
+Simple serverless API for sending WhatsApp notifications via Meta's WhatsApp
+Cloud API (Graph API), called directly — no BSP SDK in the send path.
 
 ## Deploy to Vercel (Recommended)
 
@@ -22,9 +23,10 @@ vercel
 In Vercel dashboard (or via CLI):
 
 ```bash
-vercel env add TWILIO_SID
-vercel env add TWILIO_AUTH_TOKEN
-vercel env add TWILIO_WHATSAPP_NUMBER
+vercel env add WHATSAPP_TOKEN
+vercel env add WHATSAPP_PHONE_NUMBER_ID
+vercel env add WHATSAPP_WABA_ID
+vercel env add GRAPH_API_VERSION
 vercel env add API_KEY
 ```
 
@@ -56,7 +58,7 @@ curl -X POST https://your-app.vercel.app/api/send_whatsapp \
 ```json
 {
   "success": true,
-  "message_sid": "SMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  "message_sid": "wamid.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 }
 ```
 
@@ -82,15 +84,20 @@ blocking legitimate alerts.
 
 ## Environment Variables
 
-| Variable                         | Description                                                                                 |
-| -------------------------------- | ------------------------------------------------------------------------------------------- |
-| TWILIO_SID                       | Twilio Account SID                                                                          |
-| TWILIO_AUTH_TOKEN                | Twilio Auth Token                                                                           |
-| TWILIO_WHATSAPP_NUMBER           | Your WhatsApp Business number (+13072842785)                                                |
-| API_KEY                          | Secret key for authenticating StockAlert app requests                                       |
-| KV_REST_API_URL                  | Rate limiting - auto-injected by the Vercel Upstash integration (legacy "Vercel KV" naming) |
-| KV_REST_API_TOKEN                | Rate limiting - auto-injected by the Vercel Upstash integration (legacy "Vercel KV" naming) |
-| RATE_LIMIT_PER_NUMBER_PER_MINUTE | Optional override, default `10`                                                             |
-| RATE_LIMIT_PER_NUMBER_PER_HOUR   | Optional override, default `60`                                                             |
-| RATE_LIMIT_GLOBAL_PER_MINUTE     | Optional override, default `100`                                                            |
-| RATE_LIMIT_GLOBAL_PER_HOUR       | Optional override, default `2000`                                                           |
+| Variable                         | Description                                                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| WHATSAPP_TOKEN                   | Meta System User access token (never-expiry, `whatsapp_business_messaging` + `whatsapp_business_management` scopes) |
+| WHATSAPP_PHONE_NUMBER_ID         | Meta-issued Phone Number ID (not the raw phone number)                                                              |
+| WHATSAPP_WABA_ID                 | WhatsApp Business Account ID (used for template management)                                                         |
+| GRAPH_API_VERSION                | Graph API version, e.g. `v25.0`                                                                                     |
+| API_KEY                          | Secret key for authenticating StockAlert app requests                                                               |
+| KV_REST_API_URL                  | Rate limiting - auto-injected by the Vercel Upstash integration (legacy "Vercel KV" naming)                         |
+| KV_REST_API_TOKEN                | Rate limiting - auto-injected by the Vercel Upstash integration (legacy "Vercel KV" naming)                         |
+| RATE_LIMIT_PER_NUMBER_PER_MINUTE | Optional override, default `10`                                                                                     |
+| RATE_LIMIT_PER_NUMBER_PER_HOUR   | Optional override, default `60`                                                                                     |
+| RATE_LIMIT_GLOBAL_PER_MINUTE     | Optional override, default `100`                                                                                    |
+| RATE_LIMIT_GLOBAL_PER_HOUR       | Optional override, default `2000`                                                                                   |
+
+The underlying phone number (+13072842785) is still purchased/hosted through
+Twilio, but Twilio is no longer in the WhatsApp send path — see
+`operating-system/cushlabs/whatsapp-infrastructure.md` for the full picture.

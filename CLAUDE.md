@@ -66,6 +66,16 @@ python setup_msi.py build_exe
 
 ## WhatsApp/SMS Backend (Vercel)
 
+> **MIGRATION IN PROGRESS (started 2026-07-11):** moving off Twilio for
+> WhatsApp sending, onto Meta's WhatsApp Cloud API (Graph API) directly.
+> Twilio is kept **only** to host the underlying phone number
+> (+13072842785) — the WABA/messaging relationship moves to a dedicated
+> CushLabs Meta app. See `operating-system/cushlabs/whatsapp-infrastructure.md`
+> for the cross-project picture and `docs/WHATSAPP_MIGRATION_PROMPT.md` for
+> the original migration spec. Code below reflects the **target** Meta
+> Cloud API state; it goes live once Robert completes the Meta app/WABA
+> setup and a real template gets APPROVED (Phase 0/2 — see task tracker).
+
 ### Vercel Project
 
 - **Project URL**: https://vercel.com/rcushmaniii-projects/stockalert-api
@@ -80,17 +90,26 @@ python setup_msi.py build_exe
 - Project: `rcushmaniii-projects/stockalert-api`
 - Production URL: `https://stockalert-api.vercel.app`
 
-### Twilio WhatsApp Configuration
+### Meta WhatsApp Cloud API Configuration
 
-- **Account SID**: (stored in Vercel environment variables)
-- **WhatsApp Number**: (stored in Vercel environment variables)
+- **Sender number**: +13072842785 (hosted by Twilio, registered into CushLabs' own WABA — not a Twilio-managed WhatsApp Sender)
+- **WABA**: CushLabs Notifications — `1669695934130784` (fresh WABA created 2026-07-14 after the legacy "Rank It Better" WABA proved unusable for direct Cloud API sends — persistent #200 errors with fully correct config; see `operating-system/cushlabs/whatsapp-infrastructure.md`)
+- **Phone Number ID**: `1203172156219078` (changed when the number moved WABAs)
+- **Credentials** (Vercel env vars): `WHATSAPP_TOKEN` (System User, never-expiry), `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_WABA_ID`, `GRAPH_API_VERSION` (pin `v25.0`)
+- Send path calls `POST https://graph.facebook.com/{GRAPH_API_VERSION}/{WHATSAPP_PHONE_NUMBER_ID}/messages` directly via stdlib `urllib` — no SDK dependency
 
 **Templates:**
 
-| Template    | SID                                  | Variables                                                           | Purpose                                    |
-| ----------- | ------------------------------------ | ------------------------------------------------------------------- | ------------------------------------------ |
-| Price Alert | `HX138b713346901520a4a6d48e21ec3e68` | `{{1}}`=symbol, `{{2}}`=price, `{{3}}`=direction, `{{4}}`=threshold | Alert when price crosses threshold         |
-| Opt-In      | `HX777abe17f68d1daf042e9771c7c96451` | `{{1}}`=stock_count                                                 | Request consent when user enables WhatsApp |
+| Template    | Meta template name  | Variables                                                           | Purpose                                    |
+| ----------- | ------------------- | ------------------------------------------------------------------- | ------------------------------------------ |
+| Price Alert | `stock_price_alert` | `{{1}}`=symbol, `{{2}}`=price, `{{3}}`=direction, `{{4}}`=threshold | Alert when price crosses threshold         |
+| Opt-In      | `whatsapp_optin`    | `{{1}}`=stock_count                                                 | Request consent when user enables WhatsApp |
+
+Definitions live in `backend/scripts/whatsapp_templates.py`; submit via
+`backend/scripts/submit_templates.py`, check approval via
+`backend/scripts/template_status.py`. Both must be **APPROVED** in Meta's
+WhatsApp Manager before they'll send — this replaces the old Twilio Content
+Template SIDs (`HX138b713346901520a4a6d48e21ec3e68`, `HX777abe17f68d1daf042e9771c7c96451`), which are now retired.
 
 **Opt-In Flow:**
 
@@ -112,12 +131,11 @@ POST /api/send_whatsapp
 }
 ```
 
-**Note**: Endpoint is `send_whatsapp` (underscore), NOT `send-whatsapp` (hyphen)!
+**Note**: Endpoint is `send_whatsapp` (underscore), NOT `send-whatsapp` (hyphen)! Request/response contract is unchanged by the Twilio→Meta migration — only the backend implementation changed.
 
 ### Desktop App Integration
 
-- `src/stockalert/core/twilio_service.py` calls the Vercel API
-- Does NOT use Twilio SDK directly (avoids bundling credentials in exe)
+- `src/stockalert/core/twilio_service.py` calls the Vercel API (module name is legacy — it never called the Twilio SDK directly and now the backend doesn't either)
 - Phone numbers are validated via `phone_utils.py` using `phonenumbers` library
 
 ### API Key Authentication (Internal)
@@ -133,7 +151,8 @@ The WhatsApp backend requires an API key for authentication. This is **completel
 ### Rate Limiting
 
 The WhatsApp send endpoint (`backend/api/send_whatsapp.py`) enforces rate
-limits via Upstash Redis (REST API, no SDK):
+limits via Upstash Redis (REST API, no SDK - same no-dependency approach as
+the Graph API calls):
 
 - Per-recipient: 10/minute, 60/hour (env: `RATE_LIMIT_PER_NUMBER_PER_MINUTE`,
   `RATE_LIMIT_PER_NUMBER_PER_HOUR`)
@@ -426,3 +445,9 @@ ruff format src/
 11. **WhatsApp API Key**: The backend authentication key is embedded in the app and auto-provisioned. Users never see or manage this key - they just enable WhatsApp alerts and it works.
 
 12. **Vercel Deployment Protection**: If WhatsApp returns 401, check that Vercel Deployment Protection is disabled for the API project, or verify the embedded API key matches the Vercel `API_KEY` environment variable.
+
+## Session Log
+
+A running log of all working sessions is maintained at `docs/SESSION_LOG.md`.
+Always append a new entry at the top of this file before closing a session.
+Use the `session-logger` skill to generate the entry.
