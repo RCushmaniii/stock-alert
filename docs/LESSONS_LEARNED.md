@@ -31,18 +31,21 @@ Example:  C:\Users\Robert Cushman\AppData\Local\Programs\Inno Setup 6\ISCC.exe
 ```
 
 Do NOT look for it in:
+
 - `C:\Program Files (x86)\Inno Setup 6\`
 - `C:\Program Files\Inno Setup 6\`
 
 ### Build Commands
 
 **Correct way to build:**
+
 ```bash
 cd "C:\Users\Robert Cushman\.vscode\Projects\ai-stock-alert"
 python setup_msi.py build_exe
 ```
 
 **Wrong way (will fail):**
+
 ```bash
 python -m cx_Freeze build_exe  # Error: 'executables' must be a list
 ```
@@ -52,11 +55,13 @@ python -m cx_Freeze build_exe  # Error: 'executables' must be a list
 If the build fails with "build_exe directory cannot be cleaned", the app is still running.
 
 **Use Windows-style flags in Git Bash:**
+
 ```bash
 taskkill //F //IM StockAlert.exe
 ```
 
 **NOT Unix-style flags:**
+
 ```bash
 taskkill /f /im StockAlert.exe  # May not work in Git Bash
 ```
@@ -123,13 +128,13 @@ class FinnhubProvider:
 
 Know how many API calls each operation makes:
 
-| Operation | API Calls |
-|-----------|-----------|
-| Test Connection | 1 (quote) |
-| Validate Symbol | 1 (symbol_lookup) + 1 (quote) + 1 (company_profile) = 3 |
-| Refresh Price | 1 (quote) |
-| Edit Ticker Dialog | 1 (quote on open) |
-| News Refresh | 1 per category |
+| Operation          | API Calls                                               |
+| ------------------ | ------------------------------------------------------- |
+| Test Connection    | 1 (quote)                                               |
+| Validate Symbol    | 1 (symbol_lookup) + 1 (quote) + 1 (company_profile) = 3 |
+| Refresh Price      | 1 (quote)                                               |
+| Edit Ticker Dialog | 1 (quote on open)                                       |
+| News Refresh       | 1 per category                                          |
 
 ---
 
@@ -245,6 +250,7 @@ This section documents the extensive struggles with implementing single-instance
 ### The Problem
 
 When a user clicks the app icon (Start Menu, desktop shortcut) while it's already running in the system tray:
+
 - **Expected**: Existing window appears
 - **Wrong behavior 1**: Error dialog "StockAlert is already running" (unfriendly)
 - **Wrong behavior 2**: Nothing happens (confusing)
@@ -253,6 +259,7 @@ When a user clicks the app icon (Start Menu, desktop shortcut) while it's alread
 ### Architecture Overview
 
 StockAlert has a **GUI/Service split architecture**:
+
 - **GUI Process** (`StockAlert.exe`): PyQt6 window, can minimize to system tray
 - **Service Process** (`StockAlert.exe --service`): Headless monitoring, Named Pipe server for IPC
 - **Second Instance** (user clicks app again): Should tell GUI to show window, then exit
@@ -260,6 +267,7 @@ StockAlert has a **GUI/Service split architecture**:
 ### Failed Approaches (Don't Do These)
 
 #### ❌ Approach 1: Show Error Dialog
+
 ```python
 # WRONG - Unfriendly UX
 if not instance_lock.acquire():
@@ -267,9 +275,11 @@ if not instance_lock.acquire():
         "Check your system tray for the existing instance.")
     return 1
 ```
+
 **Problem**: Users don't know what a "system tray" is. They just want the window to appear.
 
 #### ❌ Approach 2: Windows API FindWindow + ShowWindow
+
 ```python
 # WRONG - Causes blank white window with Qt
 user32 = ctypes.windll.user32
@@ -278,15 +288,18 @@ if hwnd:
     user32.ShowWindow(hwnd, SW_RESTORE)
     user32.SetForegroundWindow(hwnd)
 ```
+
 **Problem**: Windows API's `ShowWindow()` on a Qt window that's hidden via `hide()` results in a **blank white window**. The Qt widgets don't render because Qt didn't properly prepare the window for display.
 
 #### ❌ Approach 3: QTimer.singleShot from Background Thread
+
 ```python
 # WRONG - QTimer.singleShot doesn't work from non-Qt threads
 def _handle_ipc_command(self, command):
     if command == "SHOW_WINDOW":
         QTimer.singleShot(0, self._show_main_window)  # Silent failure!
 ```
+
 **Problem**: `QTimer.singleShot()` called from a background thread (IPC server thread) silently fails. The callback never executes.
 
 ### ✅ The Correct Solution: IPC + QMetaObject.invokeMethod
@@ -294,6 +307,7 @@ def _handle_ipc_command(self, command):
 **Step 1: Single-Instance Detection via Lock File**
 
 In `__main__.py`:
+
 ```python
 class InstanceLock:
     """Uses file locking for single-instance detection."""
@@ -310,6 +324,7 @@ class InstanceLock:
 **Step 2: GUI IPC Server (Named Pipe)**
 
 In `core/ipc.py`:
+
 ```python
 GUI_PIPE_NAME = "\\\\.\\pipe\\StockAlertGUIPipe"
 
@@ -333,6 +348,7 @@ class GUIPipeServer:
 **Step 3: Thread-Safe Window Activation**
 
 In `app.py` - **CRITICAL: Use QMetaObject.invokeMethod, NOT QTimer.singleShot**:
+
 ```python
 def _handle_gui_command(self, command: str) -> str:
     """Called from background IPC thread."""
@@ -349,6 +365,7 @@ def _handle_gui_command(self, command: str) -> str:
 ```
 
 In `main_window.py` - **The slot must be decorated with @pyqtSlot()**:
+
 ```python
 from PyQt6.QtCore import pyqtSlot
 
@@ -364,6 +381,7 @@ class MainWindow(QMainWindow):
 **Step 4: Second Instance Sends Command and Exits Silently**
 
 In `__main__.py`:
+
 ```python
 def _activate_existing_instance() -> bool:
     """Send IPC command to existing GUI to show window."""
@@ -380,21 +398,23 @@ def main():
 
 ### Key Files for Single-Instance/IPC
 
-| File | Purpose |
-|------|---------|
-| `src/stockalert/__main__.py` | Instance lock, `_activate_existing_instance()` |
-| `src/stockalert/core/ipc.py` | `GUIPipeServer`, `send_gui_command()` |
-| `src/stockalert/app.py` | `_handle_gui_command()`, starts GUIPipeServer |
-| `src/stockalert/ui/main_window.py` | `_show_from_ipc()` slot |
+| File                               | Purpose                                        |
+| ---------------------------------- | ---------------------------------------------- |
+| `src/stockalert/__main__.py`       | Instance lock, `_activate_existing_instance()` |
+| `src/stockalert/core/ipc.py`       | `GUIPipeServer`, `send_gui_command()`          |
+| `src/stockalert/app.py`            | `_handle_gui_command()`, starts GUIPipeServer  |
+| `src/stockalert/ui/main_window.py` | `_show_from_ipc()` slot                        |
 
 ### Debugging Tips
 
 **Check if IPC is working:**
+
 ```bash
 tail -f stockalert.log | grep -i "IPC\|SHOW_WINDOW"
 ```
 
 **Expected log entries when second instance activates first:**
+
 ```
 INFO | GUI pipe server started: \\.\pipe\StockAlertGUIPipe
 INFO | GUI IPC received command: SHOW_WINDOW
@@ -402,6 +422,7 @@ INFO | Showing window via IPC request
 ```
 
 **If window doesn't appear:**
+
 1. Check "GUI pipe server started" appears in log
 2. Check "GUI IPC received command: SHOW_WINDOW" appears
 3. If command received but window doesn't show → check `_show_from_ipc` is decorated with `@pyqtSlot()`
@@ -436,6 +457,7 @@ This is separate from the GUI's `InstanceLock` - both can run simultaneously (GU
 When user saves settings in the GUI, the backend service needs to pick up changes:
 
 **Method 1: Immediate IPC (preferred)**
+
 ```python
 # In app.py _on_settings_changed()
 if is_service_running():
@@ -443,6 +465,7 @@ if is_service_running():
 ```
 
 **Method 2: File watching (backup)**
+
 ```python
 # In service.py run_forever()
 while self._running:
@@ -451,6 +474,7 @@ while self._running:
 ```
 
 The service's `_reload_config()` method:
+
 - Reloads config from disk
 - Updates language if changed
 - Updates alert settings (WhatsApp enabled, etc.)
@@ -548,6 +572,7 @@ Example:  C:\Users\Robert Cushman\AppData\Roaming\StockAlert\config.json
 ```
 
 **Why AppData?**
+
 - Survives application rebuilds (no more re-entering phone number!)
 - Survives reinstalls (user data separate from app files)
 - Standard Windows pattern for user data
@@ -555,6 +580,7 @@ Example:  C:\Users\Robert Cushman\AppData\Roaming\StockAlert\config.json
 **Migration**: On first run, the app checks for config in the old location (app directory) and migrates it to AppData automatically.
 
 **Key Files**:
+
 - `src/stockalert/core/paths.py` - Central path management
 - Uses `get_config_path()` everywhere instead of hardcoded paths
 
@@ -593,6 +619,7 @@ def _on_save_clicked(self):
 ```
 
 **Root Cause Log Evidence**:
+
 ```
 22:08:15 | API key stored in config file        ← Test connection saved key
 22:08:21 | API key present: True                ← Works!
@@ -603,11 +630,13 @@ def _on_save_clicked(self):
 ### Config File Location
 
 Config is now stored in AppData for persistence (both dev and frozen):
+
 ```
 C:\Users\<username>\AppData\Roaming\StockAlert\config.json
 ```
 
 Assets (icons, locales) remain in the app directory:
+
 ```
 C:\...\build\exe.win-amd64-3.12\stock_alert.ico
 C:\...\build\exe.win-amd64-3.12\lib\stockalert\i18n\locales\
@@ -620,6 +649,7 @@ C:\...\build\exe.win-amd64-3.12\lib\stockalert\i18n\locales\
 ### Always Update Both Locale Files
 
 Every new translation key MUST be added to BOTH:
+
 - `src/stockalert/i18n/locales/en.json`
 - `src/stockalert/i18n/locales/es.json`
 
@@ -654,6 +684,7 @@ tier_text = _("settings.tier_limits_free").format(
 ### Pre-Demo Checklist
 
 Before any demo:
+
 1. Do a fresh build
 2. Test the entire happy path manually
 3. **DO NOT** add new features or "edge case fixes" right before demo
@@ -662,6 +693,7 @@ Before any demo:
 ### Regression Testing
 
 After any change, test:
+
 1. App launches without crash
 2. API key test connection works
 3. Can add/edit/delete tickers
@@ -721,7 +753,7 @@ After any change, test:
 
 **Lesson**: `QTimer.singleShot()` silently fails when called from non-Qt thread. Use `QMetaObject.invokeMethod()` with `Qt.ConnectionType.QueuedConnection` instead.
 
-### 9. Passing Path(__file__) in Frozen Builds
+### 9. Passing Path(**file**) in Frozen Builds
 
 **What happened**: Service passed `locales_dir=Path(__file__).parent / "i18n/locales"` to Translator. Locale files not found.
 
@@ -740,6 +772,7 @@ After any change, test:
 ### Architecture Overview
 
 The WhatsApp notification system uses a **three-tier architecture**:
+
 1. **Desktop App** → 2. **Vercel Backend** → 3. **Twilio API**
 
 The desktop app does NOT call Twilio directly. This keeps Twilio credentials out of the executable.
@@ -749,17 +782,20 @@ The desktop app does NOT call Twilio directly. This keeps Twilio credentials out
 **CRITICAL**: The WhatsApp API key is **embedded in the app** and **invisible to users**.
 
 **How it works:**
+
 1. The API key is XOR-obfuscated and embedded in `core/api_key_manager.py`
 2. On app startup, `provision_stockalert_api_key()` auto-stores it in Windows Credential Manager
 3. `TwilioService` reads the key from Credential Manager when sending alerts
 4. Users just toggle "Enable WhatsApp" - no key configuration required
 
 **Why this design:**
+
 - Users only configure ONE key (Finnhub) - less friction
 - WhatsApp API key is the app's identity, not user data
 - Security: key is obfuscated, not plain text in the binary
 
 **Updating the embedded key:**
+
 ```python
 # In api_key_manager.py
 # Generate new encoded key:
@@ -769,6 +805,7 @@ print(repr(encoded))  # Use this as _EMBEDDED_KEY_DATA
 ```
 
 **Vercel side:**
+
 - Set `API_KEY` environment variable in Vercel project settings
 - Deploy: `cd backend && vercel --prod`
 - Test: request without key should return 401
@@ -776,12 +813,14 @@ print(repr(encoded))  # Use this as _EMBEDDED_KEY_DATA
 ### Common Issues
 
 **401 Unauthorized from Vercel:**
+
 1. Check `API_KEY` env var is set in Vercel (not empty)
 2. Verify no trailing newline in the value
 3. Ensure embedded key in app matches Vercel exactly
 4. Redeploy after changing env vars: `vercel --prod --force`
 
 **Key not provisioning:**
+
 - Check `provision_stockalert_api_key()` is called in `app.py` and `service.py`
 - Verify `_decode_embedded_key()` returns correct value
 - Check Windows Credential Manager or config.json for stored key
@@ -796,21 +835,22 @@ print(repr(encoded))  # Use this as _EMBEDDED_KEY_DATA
 
 **Example**: Adding a "News" column (📰) after the Symbol column shifted all subsequent columns:
 
-| Column | Before | After |
-|--------|--------|-------|
-| Checkbox | 0 | 0 |
-| Logo | 1 | 1 |
-| Symbol | 2 | 2 |
-| **📰 News** | - | **3** (NEW) |
-| Name | 3 | 4 |
-| Industry | 4 | 5 |
-| Market Cap | 5 | 6 |
-| Low | 6 | 7 |
-| High | 7 | 8 |
-| Price | 8 | 9 |
-| Enabled | 9 | 10 |
+| Column      | Before | After       |
+| ----------- | ------ | ----------- |
+| Checkbox    | 0      | 0           |
+| Logo        | 1      | 1           |
+| Symbol      | 2      | 2           |
+| **📰 News** | -      | **3** (NEW) |
+| Name        | 3      | 4           |
+| Industry    | 4      | 5           |
+| Market Cap  | 5      | 6           |
+| Low         | 6      | 7           |
+| High        | 7      | 8           |
+| Price       | 8      | 9           |
+| Enabled     | 9      | 10          |
 
 **Checklist when adding columns:**
+
 1. Update `setColumnCount()`
 2. Update header labels list
 3. Update ALL `setItem()` and `setCellWidget()` calls
@@ -848,6 +888,7 @@ checkbox.setToolTip(_("tickers.news_enabled_help"))
 **Problem**: Twilio API can return `success: true` and a `message_sid` even when the message will NOT be delivered.
 
 **Why this happens:**
+
 - Twilio accepts the message into their queue (API success)
 - Meta/WhatsApp later decides whether to deliver it
 - Delivery depends on: template approval status, user quality rating, rate limits
@@ -873,16 +914,19 @@ checkbox.setToolTip(_("tickers.news_enabled_help"))
 ### Meta Quality Monitoring
 
 WhatsApp Business messages include an info icon (ⓘ) that users can tap to:
+
 - Mark as "Not interested"
 - Report as spam
 - Block the sender
 
 **Impact of negative feedback:**
+
 - Lowers your quality rating
 - Can cause: slower delivery, silent failures, account restrictions
 - No notification when this happens - messages just stop delivering
 
 **Mitigation strategies:**
+
 1. Use reasonable alert thresholds to minimize notification frequency
 2. Implement cooldown periods (Settings) to prevent alert flooding
 3. Warn users about WhatsApp quality in onboarding/help
@@ -985,11 +1029,11 @@ The currency feature allows users to view prices in USD or Mexican Pesos (MXN):
 
 ### Key Files
 
-| File | Purpose |
-|------|---------|
-| `src/stockalert/api/exchange_rate.py` | API client with caching |
-| `src/stockalert/core/currency.py` | CurrencyFormatter class |
-| `src/stockalert/ui/main_window.py` | Currency toggle in header |
+| File                                  | Purpose                   |
+| ------------------------------------- | ------------------------- |
+| `src/stockalert/api/exchange_rate.py` | API client with caching   |
+| `src/stockalert/core/currency.py`     | CurrencyFormatter class   |
+| `src/stockalert/ui/main_window.py`    | Currency toggle in header |
 
 ### Implementation Pattern
 
@@ -1060,6 +1104,7 @@ To trigger the onboarding dialog on next launch:
 ```
 
 Or programmatically:
+
 ```python
 config_manager.set("onboarding_completed", False, save=True)
 ```
@@ -1067,11 +1112,13 @@ config_manager.set("onboarding_completed", False, save=True)
 ### Content Guidelines
 
 Onboarding should be:
+
 1. **Specific**: Step-by-step with exact URLs and button names
 2. **Minimal**: Only essential setup steps (4 steps max)
 3. **Honest**: Include warnings about limitations (e.g., WhatsApp quality issues)
 
 Example structure:
+
 - Step 1: Get Finnhub API key (with exact URL)
 - Step 2: Configure Settings (paste key, test connection)
 - Step 3: Set up Profile (for WhatsApp - phone with country code)
@@ -1084,6 +1131,7 @@ Include a warning tip about WhatsApp quality monitoring to set expectations.
 ## Quick Reference
 
 ### Build & Run (Development)
+
 ```bash
 taskkill //F //IM StockAlert.exe
 python setup_msi.py build_exe
@@ -1091,22 +1139,24 @@ python setup_msi.py build_exe
 ```
 
 ### Create Installer (Release)
+
 ```bash
 "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer.iss
 ```
 
 ### Key File Locations
-| File | Purpose |
-|------|---------|
-| `%APPDATA%\StockAlert\config.json` | User settings (persists across builds!) |
-| `setup_msi.py` | Build configuration |
-| `installer.iss` | Inno Setup script |
-| `src/stockalert/app.py` | Main application orchestrator |
-| `src/stockalert/core/paths.py` | Central path management |
-| `src/stockalert/core/api_key_manager.py` | API key storage |
-| `src/stockalert/api/finnhub.py` | API client with rate limiting |
-| `src/stockalert/ui/dialogs/settings_dialog.py` | Settings UI |
-| `src/stockalert/i18n/locales/*.json` | Translations |
+
+| File                                           | Purpose                                 |
+| ---------------------------------------------- | --------------------------------------- |
+| `%APPDATA%\StockAlert\config.json`             | User settings (persists across builds!) |
+| `setup_msi.py`                                 | Build configuration                     |
+| `installer.iss`                                | Inno Setup script                       |
+| `src/stockalert/app.py`                        | Main application orchestrator           |
+| `src/stockalert/core/paths.py`                 | Central path management                 |
+| `src/stockalert/core/api_key_manager.py`       | API key storage                         |
+| `src/stockalert/api/finnhub.py`                | API client with rate limiting           |
+| `src/stockalert/ui/dialogs/settings_dialog.py` | Settings UI                             |
+| `src/stockalert/i18n/locales/*.json`           | Translations                            |
 
 ---
 
@@ -1115,6 +1165,7 @@ python setup_msi.py build_exe
 ### Why Opt-In Is Required
 
 WhatsApp Business API requires **explicit user consent** before sending business-initiated messages. Without opt-in:
+
 - Messages may be flagged as spam
 - Meta may throttle or block delivery
 - Account quality rating suffers
@@ -1124,6 +1175,7 @@ WhatsApp Business API requires **explicit user consent** before sending business
 **1. Twilio Content Template**
 
 Create an opt-in template in Twilio Console → Messaging → Content Templates:
+
 - Template Name: `stock_alert_optin`
 - Body: "AI StockAlert would like to send you price alerts when your stocks cross your set thresholds.\n\nCurrently, you're monitoring {{1}} stocks.\n\nWould you like to receive WhatsApp alerts?"
 - Quick Reply buttons: "Yes, enable alerts" | "No thanks"
@@ -1186,4 +1238,63 @@ def _send_whatsapp_optin(self):
 
 ---
 
-*Last updated: February 7, 2026*
+## WhatsApp Twilio→Meta Migration (July 2026)
+
+Full context: `operating-system/cushlabs/whatsapp-infrastructure.md` §3 and
+`docs/SESSION_LOG.md` (2026-07-14). Condensed lessons:
+
+### Meta platform lessons
+
+1. **A BSP-era WABA can permanently reject direct Cloud API sends** with
+   error #200 even when every checkable permission is correct (token scopes,
+   System User MANAGE access, app subscription, business verification,
+   number CONNECTED/VERIFIED). Nothing self-serve clears it. Fix: create a
+   fresh WABA and move the number in. Diagnostic that proved it: the
+   identical token sent instantly through any non-BSP WABA.
+2. **Phone Number ID changes when a number moves WABAs.** Anything caching
+   the old ID (env vars, docs) must be updated.
+3. **Own-WABA sending needs only Standard Access** — no App Review, no
+   publishing. Development mode is a permanent valid state for single-tenant
+   use. "Become a Tech Provider" / App Review flows are for accessing OTHER
+   businesses' WABAs.
+4. **Display name approval needs corroborating web presence.** Bare
+   "CushLabs" was rejected until the app's Basic Settings carried real
+   privacy-policy/terms/domain URLs on cushlabs.ai; the fresh submission
+   with a Website field then passed.
+5. **Free-form messages are ACCEPTED then silently dropped outside a 24h
+   session window** — the failure goes to a webhook (which this project
+   doesn't run). "Accepted + wamid" ≠ delivered. Templates need no window.
+   To test free-form: have the recipient message the business number first.
+6. **Meta may auto-recategorize templates** (whatsapp_optin: UTILITY →
+   MARKETING). It still sends; MARKETING costs more per conversation.
+7. **Voice verification playbook for Twilio-hosted numbers:** SMS codes get
+   carrier-filtered; use voice. A TwiML Bin forwarding the number's calls to
+   a real phone works. Have the phone in hand BEFORE requesting the code —
+   codes expire fast and repeated requests hit ~60s+ cooldowns. The whole
+   verify/register/subscribe flow is drivable via Graph API
+   (`request_code`/`verify_code`/`register`/`subscribed_apps`).
+8. **Generating a new System User token does NOT revoke old ones.** Rotation
+   requires an explicit "Revoke tokens" click, or the exposed token stays
+   live indefinitely.
+
+### Ops / process lessons (from the 2026-07-14/15 production outage)
+
+9. **Re-verify the live endpoint after EVERY deploy** — including "just
+   redeploying the merged version." The outage shipped in a final redeploy
+   performed after the last end-to-end test.
+10. **When resolving merge conflicts with `--ours`/`--theirs`, grep the
+    result for what must NOT be there** (e.g. `twilio`), not just for what
+    must be there. Main's copy of `send_whatsapp.py` had rate limiting added
+    to the OLD Twilio implementation; taking it wholesale reverted the
+    entire migration while all the "is rate limiting present" checks passed.
+11. **Parallel Claude sessions on one repo diverge branches fast.** Two
+    sessions pushed to the same feature branch and merged overlapping PRs
+    (#16/#17 vs #18) — the conflicting histories created the trap in #10.
+    One writer per branch, or rebase before every push.
+12. **Secret values transit chat context via file-edit diff notifications**
+    even when never printed deliberately. Treat any token that existed in a
+    file Claude edited as exposed; rotate + revoke on a schedule.
+
+---
+
+_Last updated: July 15, 2026_
