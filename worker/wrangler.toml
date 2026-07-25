@@ -1,0 +1,20 @@
+name = "stockalert-monitor"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+
+# Every 5 minutes. The Worker exits immediately (zero Finnhub calls) when the
+# US market is closed, so this costs nothing outside 9:30-16:00 ET Mon-Fri.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "stockalert"
+database_id = "643c4311-252f-47b1-93d3-acbcaf19400f"
+
+[vars]
+GRAPH_API_VERSION = "v25.0"
+MARKET_TZ = "America/New_York"
+
+[observability]
+enabled = true

@@ -1,0 +1,20 @@
+{
+  "name": "stockalert-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CushLabs StockAlert cloud monitor - Cloudflare Worker that watches stock prices 24/7 and sends WhatsApp alerts on threshold crossings.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "tail": "wrangler tail --format pretty",
+    "db:schema": "wrangler d1 execute stockalert --remote --file=./schema.sql",
+    "db:schema:local": "wrangler d1 execute stockalert --local --file=./schema.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250705.0",
+    "typescript": "^5.9.2",
+    "wrangler": "^4.114.0"
+  }
+}
