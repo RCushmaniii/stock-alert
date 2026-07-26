@@ -62,3 +62,6 @@ htmlcov/
 # Build artifacts
 *.msi
 *.exe
+
+# Cloudflare Wrangler local state
+.wrangler/
