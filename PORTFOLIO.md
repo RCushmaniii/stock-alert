@@ -12,8 +12,10 @@ category: "Tools"
 tech_stack:
   - "Python"
   - "PyQt6"
+  - "TypeScript"
   - "Finnhub API"
-  - "Twilio/WhatsApp"
+  - "WhatsApp Cloud API"
+  - "Cloudflare Workers"
   - "Vercel Serverless"
 thumbnail: "/images/stockalert-thumb.jpg"
 status: "Production"
@@ -23,7 +25,8 @@ problem: "Active traders need to monitor multiple stock positions simultaneously
 solution: "A professional Windows desktop application that monitors stock prices in real-time and sends instant alerts via both Windows toast notifications and WhatsApp messages when prices cross user-defined thresholds. It runs silently in the system tray with zero subscription fees."
 key_features:
   - "Real-time price monitoring for up to 15 stocks with configurable intervals and automatic market hours detection"
-  - "Multi-channel alerts: Windows toast notifications with audio plus WhatsApp mobile messages via Twilio"
+  - "Multi-channel alerts: Windows toast notifications with audio plus WhatsApp mobile messages via Meta's WhatsApp Cloud API"
+  - "Cloud monitor on Cloudflare Workers checks prices every 5 minutes during market hours — alerts arrive whether or not the PC is running"
   - "Smart consolidated notifications — multiple alerts combined into a single notification per check cycle"
   - "Bilingual interface (EN/ES) with multi-currency display toggling between USD and MXN with live exchange rates"
   - "Background service runs silently in system tray — alerts work even when UI is closed, auto-starts with Windows"
@@ -81,15 +84,15 @@ tags:
 date_completed: "2026-02"
 
 # === REPO HEALTH STATUS ===
-# Last audited: 2026-07-13
+# Last audited: 2026-07-26
 # Standards defined in: operating-system/delivery/repo-health-baseline.md
 health_status:
-  sentry: "-"
+  sentry: "N"
   testing: "-"
   ci_cd: "Y"
-  health_endpoint: "n/a"
+  health_endpoint: "Y"
   security_headers: "n/a"
-  rate_limiting: "N"
+  rate_limiting: "Y"
   env_validation: "-"
   analytics: "DEFERRED"
   structured_logging: "-"
@@ -109,12 +112,15 @@ The application follows a modern Python architecture with clear separation of co
 - **Frontend**: PyQt6-based GUI with dark/light theme support, responsive layouts, and professional CushLabs branding
 - **Backend Service**: Headless monitoring service that runs independently, enabling alerts even when the GUI is closed
 - **API Layer**: Finnhub integration with intelligent rate limiting (token bucket algorithm) to maximize free tier usage
-- **Notification System**: Multi-channel delivery via Windows toast notifications and WhatsApp Business API through a Vercel serverless backend
+- **Notification System**: Multi-channel delivery via Windows toast notifications and Meta's WhatsApp Cloud API through a Vercel serverless backend, rate-limited with Upstash Redis
+- **Cloud Monitor**: A Cloudflare Worker (TypeScript, D1, cron triggers) runs the monitoring loop independently of the desktop app, so alerts fire whether or not the user's machine is awake
 - **IPC**: Named pipes for communication between GUI and background service, enabling config hot-reloading
 
 ## Key Challenges Solved
 
-**WhatsApp Business Integration**: Implemented a secure serverless backend on Vercel to handle Twilio/WhatsApp API calls, avoiding the need to bundle sensitive credentials in the desktop executable. The system uses approved message templates that comply with Meta's quality guidelines.
+**WhatsApp Business Integration**: Implemented a secure serverless backend on Vercel that calls Meta's WhatsApp Cloud API directly, avoiding the need to bundle sensitive credentials in the desktop executable. The system uses approved utility message templates that comply with Meta's quality guidelines, with per-recipient and global rate limiting backed by Upstash Redis.
+
+**Escaping the Desktop**: The original architecture put the polling loop inside the Windows executable, which meant alerts silently stopped whenever the PC slept — precisely when a price alert matters most. The monitoring loop was moved to a Cloudflare Worker on cron triggers, with alerts firing on threshold _crossings_ rather than levels so a stock parked above its target sends one message instead of one every cycle.
 
 **Frozen Build Complexity**: Overcame numerous challenges with cx_Freeze packaging including pywin32 DLL loading, Qt plugin bundling, and locale file path resolution in frozen executables.
 
