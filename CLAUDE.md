@@ -66,21 +66,20 @@ python setup_msi.py build_exe
 
 ## WhatsApp/SMS Backend (Vercel)
 
-> **MIGRATION IN PROGRESS (started 2026-07-11):** moving off Twilio for
-> WhatsApp sending, onto Meta's WhatsApp Cloud API (Graph API) directly.
-> Twilio is kept **only** to host the underlying phone number
-> (+13072842785) — the WABA/messaging relationship moves to a dedicated
-> CushLabs Meta app. See `operating-system/cushlabs/whatsapp-infrastructure.md`
-> for the cross-project picture and `docs/WHATSAPP_MIGRATION_PROMPT.md` for
-> the original migration spec. Code below reflects the **target** Meta
-> Cloud API state; it goes live once Robert completes the Meta app/WABA
-> setup and a real template gets APPROVED (Phase 0/2 — see task tracker).
+> **MIGRATION COMPLETE (2026-07-14).** WhatsApp sending runs on Meta's
+> WhatsApp Cloud API (Graph API) directly — PR #18, production-verified on
+> the "CushLabs Notifications" WABA. **There is no Twilio code left in the
+> send path.** Twilio's only remaining role is hosting the underlying phone
+> number (+13072842785); it carries no messages and bills no per-message
+> WhatsApp fees. See `operating-system/cushlabs/whatsapp-infrastructure.md`
+> for the cross-project picture. `docs/WHATSAPP_MIGRATION_PROMPT.md` is the
+> historical spec, kept for context only — it is not a live plan.
 
 ### Vercel Project
 
 - **Project URL**: https://vercel.com/rcushmaniii-projects/stockalert-api
 - **API Endpoint**: `https://stockalert-api.vercel.app/api/send_whatsapp` (UNDERSCORE, not hyphen!)
-- **Source Code**: `backend/api/send_whatsapp.py` (auto-deploys on git push)
+- **Source Code**: `backend/api/send_whatsapp.py` (deployed via CLI — see below, NOT on git push)
 
 ### Vercel Deployment (CLI Required)
 
@@ -175,6 +174,40 @@ Mexican mobile numbers are special:
 - Standard format: `+52` + 10 digits (e.g., `+523315590572`)
 - WhatsApp format: `+521` + 10 digits (e.g., `+5213315590572`) - needs the "1" prefix
 - The `phonenumbers` library may reject +521 as "too long" - we handle this specially in `phone_utils.py`
+
+---
+
+## Cloud Monitor (Cloudflare Worker)
+
+> **The monitoring loop now runs in the cloud, not only on the desktop.**
+> Added 2026-07-25 (PR #21). The desktop app is unchanged and still runs.
+
+- **Live**: `https://stockalert-monitor.rcushmaniii.workers.dev`
+- **Source**: `worker/` (TypeScript, Cloudflare Workers + D1 + cron triggers)
+- **Cron**: every 5 minutes; exits immediately with **zero** Finnhub calls
+  outside 09:30–16:00 ET Mon–Fri (holidays and half days in `src/market-hours.ts`)
+- **Deploy**: `cd worker && pnpm deploy` — this is NOT deployed by git push
+- **Secrets**: `wrangler secret bulk .dev.vars` (never per-key `secret put` in
+  a loop — stdin piping fails silently in non-TTY contexts)
+
+**Why it exists:** the desktop app's polling loop only runs while the PC is
+awake, so alerts silently stopped exactly when they mattered most. WhatsApp
+is the delivery surface, so no mobile app is needed.
+
+**Alerting rule — transitions, not levels.** An alert fires when a price
+_crosses into_ its high/low band. A stock sitting above its threshold all
+afternoon sends **one** message, not one every 5 minutes; returning inside the
+band re-arms it. State lives in D1 `alert_state`.
+
+**Multi-user by construction.** Every table carries `user_id` and the WhatsApp
+recipient lives in the `users` table, never an env var — per the CushLabs rule
+that no global may hold a tenant-specific value. Adding a user is an `INSERT`.
+
+**IMPORTANT — deploying a new Worker trips the security tripwire.** Any new
+Cloudflare Worker on the account must be added to `ALLOWLIST` in
+`cushlabs-messenger-bot/scripts/security-audit.mjs`, or the 6-hourly audit
+sends Robert a WhatsApp "possible compromise" alert. This happened on
+2026-07-25 with `stockalert-monitor`.
 
 ---
 
