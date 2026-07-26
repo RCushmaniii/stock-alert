@@ -6,6 +6,43 @@ Entries are newest-first. Each entry documents one Claude Code working session.
 
 <!-- New entries go above this line -->
 
+## Session: 2026-07-25
+
+### Accomplished
+
+- Built and deployed the cloud monitor (PR #21): Cloudflare Worker + D1 + 5-min cron at `https://stockalert-monitor.rcushmaniii.workers.dev`, `worker/`. Moves the polling loop off the desktop app so alerts fire with the PC off.
+- Verified end-to-end in production: 8 watches seeded from the live desktop config, forced run sent a real WhatsApp (CRWD $183.28 above a temporary $180 threshold), second run correctly sent zero (de-dupe), real $270 threshold restored.
+- Added retry-with-backoff to `worker/src/finnhub.ts` after one run returned 6/8 failures; never reproduced across ~40 further calls.
+- Resolved a WhatsApp "possible compromise" alert: `stockalert-monitor` and `cushlabs-camila-demo` were both verified legitimate and allowlisted in `cushlabs-messenger-bot/scripts/security-audit.mjs` (PRs #144, #145). Audit now reports CLEAN — 8/8 Workers.
+- Cleared doc debt (PR #22): PORTFOLIO.md still credited Twilio and flagged `rate_limiting: "N"`; CLAUDE.md still said "MIGRATION IN PROGRESS" and contradicted itself on backend auto-deploy; `backend/scripts/test_real_number.py` hardcoded the retired Rank It Better phone-number id.
+- Removed the merged `whatsapp-token-fix` git worktree after verifying its commits were the pre-squash originals of #18/#19.
+
+### Decisions Made
+
+- Cloudflare Workers over the VPS: native cron, no process supervision, matches the CushLabs standard stack.
+- Alert on zone _transitions_, not levels — one message per crossing instead of one every cycle.
+- Multi-user schema from day one (`user_id` everywhere, recipient in `users`, not an env var) so a second user is an INSERT, not a refactor.
+- StockAlert is NOT a Tech Provider case — its future users are consumers, not businesses, so Embedded Signup / `cushlabs-connect` is not its path.
+- Did not build a mobile or browser app: WhatsApp is the delivery client.
+
+### Immediate Next Steps
+
+- [ ] Monday 2026-07-27 after 09:30 ET: check `/runs` and `/state` to confirm the unattended cron fired correctly — the last unproven link.
+- [ ] Replace the in-memory `new Map()` rate limiter in `cushlabs/workers/camila-demo.js` (line 29) guarding a public `ANTHROPIC_API_KEY` endpoint — P0 per the CushLabs rate-limiting rule.
+- [ ] Wire Sentry into `worker/` — currently `run_log` + `wrangler tail` only.
+
+### Technical Debt
+
+- No Sentry on the cloud monitor (`health_status.sentry` now honestly marked "N").
+- Market holidays hardcoded through 2027 in `worker/src/market-hours.ts`.
+- Desktop app and cloud monitor now hold duplicate ticker/threshold state with no sync.
+
+### Open Questions / Blockers
+
+- Business model for third-party users is deliberately deferred; going cloud inverts PORTFOLIO.md's "local-first / BYO key / one-time purchase" positioning.
+
+---
+
 ## Session: 2026-07-15
 
 ### Accomplished
