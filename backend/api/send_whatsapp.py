@@ -12,6 +12,7 @@ Supports both:
 import json
 import os
 import re
+import sys
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler
@@ -314,11 +315,33 @@ class handler(BaseHTTPRequestHandler):
     """Vercel serverless function handler."""
 
     def _validate_api_key(self) -> bool:
-        """Validate the API key from request header."""
+        """Validate the API key from request header.
+
+        Fails CLOSED when API_KEY is absent. This previously returned True
+        ("development mode"), which meant any environment missing the variable —
+        a preview deploy, a cleared value, a typo — silently became a public
+        WhatsApp sender on the CushLabs corporate number. That is the shortest
+        path to getting the number rate-limited or banned by Meta, and it takes
+        the brand's only WhatsApp identity with it.
+
+        Nothing about that failure is visible: sends simply start working for
+        everyone. So local development has to opt in explicitly instead.
+        """
         expected_key = os.environ.get('API_KEY')
         if not expected_key:
-            # No API key configured = allow all (development mode)
-            return True
+            if os.environ.get('ALLOW_UNAUTHENTICATED_SENDS') == '1':
+                print(
+                    'WARNING: API_KEY unset and ALLOW_UNAUTHENTICATED_SENDS=1 - '
+                    'this endpoint is OPEN. Never set that flag in production.',
+                    file=sys.stderr,
+                )
+                return True
+            print(
+                'ERROR: API_KEY is not set - rejecting the request. Set API_KEY '
+                'in this environment, or ALLOW_UNAUTHENTICATED_SENDS=1 for local dev.',
+                file=sys.stderr,
+            )
+            return False
 
         # Check X-API-Key header
         provided_key = self.headers.get('X-API-Key')
