@@ -15,7 +15,7 @@ winotify>=1.1.0
 windows-toasts>=1.3.0
 
 # Timezone Handling
-pytz>=2024.1
+pytz>=2026.2
 
 # Image Processing (for icons)
 Pillow>=10.0.0
