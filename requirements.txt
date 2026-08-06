@@ -12,7 +12,7 @@ python-dotenv>=1.0.0
 
 # Windows Notifications
 winotify>=1.1.0
-windows-toasts>=1.3.0
+windows-toasts>=1.3.1
 
 # Timezone Handling
 pytz>=2026.2
