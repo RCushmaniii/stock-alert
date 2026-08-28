@@ -12,7 +12,10 @@ from unittest.mock import patch
 import pytest
 import pytz
 
-from stockalert.utils.market_hours import MarketHours, US_MARKET_HOLIDAYS
+from stockalert.utils.market_hours import (
+    MarketHours,
+    get_market_holidays_for_year,
+)
 
 
 class TestMarketHours:
@@ -90,10 +93,14 @@ class TestMarketHours:
         assert not market.is_market_holiday(regular_day)
 
     def test_holiday_list_format(self) -> None:
-        """Holiday list should be properly formatted."""
-        for holiday in US_MARKET_HOLIDAYS:
-            # Should be YYYY-MM-DD format
-            datetime.strptime(holiday, "%Y-%m-%d")
+        """Generated holidays should be YYYY-MM-DD strings."""
+        for year in (2025, 2026, 2027):
+            holidays = get_market_holidays_for_year(year)
+            assert holidays, f"no holidays generated for {year}"
+            for holiday in holidays:
+                # Raises if the format is wrong
+                parsed = datetime.strptime(holiday, "%Y-%m-%d")
+                assert parsed.year == year
 
     def test_get_market_status_message_open(self, market: MarketHours) -> None:
         """Should return appropriate message when market is open."""
@@ -141,14 +148,24 @@ class TestMarketHours:
             seconds = market.seconds_until_market_open()
             assert 1700 < seconds < 1900  # Allow some tolerance
 
-    def test_holiday_years_covered(self) -> None:
-        """Should have holidays for 2024-2027."""
-        years = set()
-        for holiday in US_MARKET_HOLIDAYS:
-            year = int(holiday.split("-")[0])
-            years.add(year)
+    def test_holidays_are_generated_for_any_year(self) -> None:
+        """Any year resolves, including ones past the old hardcoded window.
 
-        assert 2024 in years
-        assert 2025 in years
-        assert 2026 in years
-        assert 2027 in years
+        This replaces an assertion that a static list covered 2024-2027. That
+        list is exactly what the computed version exists to remove: a hardcoded
+        table silently stops knowing about holidays the year it runs out, and
+        the app then treats every NYSE holiday as a trading day. 2031 is checked
+        deliberately - it is outside any table anyone hardcoded.
+        """
+        for year in (2024, 2026, 2031):
+            holidays = get_market_holidays_for_year(year)
+            # 9 fixed-date/anchored holidays plus Good Friday; NYSE observes
+            # at least 9 in every modern year.
+            assert len(holidays) >= 9, f"{year} generated only {len(holidays)}"
+            assert f"{year}-01-01" in holidays or f"{year}-01-02" in holidays
+
+    def test_christmas_is_a_holiday_every_year(self) -> None:
+        """Christmas, observed, is present in every generated year."""
+        for year in (2025, 2026, 2027, 2031):
+            holidays = get_market_holidays_for_year(year)
+            assert any(h.startswith(f"{year}-12-2") for h in holidays)

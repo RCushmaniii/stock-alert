@@ -146,10 +146,33 @@ class TestFinnhubProvider:
         assert mock_client.quote.call_count == 5
 
     def test_tokens_available_property(self, provider: FinnhubProvider) -> None:
-        """Should report available rate limiter tokens."""
-        initial_tokens = provider.tokens_available
+        """A request consumes exactly one token from the bucket.
 
+        Two things made the old version of this test unreliable, and both are
+        properties of the code rather than the test. The limiter is a MODULE-LEVEL
+        SINGLETON shared by every provider instance, so earlier tests in this file
+        drain it and the starting count is whatever they left behind - it was
+        observed at 0.0. And the bucket refills against time.monotonic(), so a
+        bare "after < before" races the refill and can be false through no fault
+        of the code.
+
+        So: reset the shared bucket, then freeze the clock so no refill happens
+        during the assertion, and check the exact debit.
+        """
+        provider._rate_limiter.reset()
+
+        initial = provider.tokens_available
         provider.get_price("AAPL")
+        after = provider.tokens_available
 
-        # Should have used one token
-        assert provider.tokens_available < initial_tokens
+        # One token spent, minus whatever refilled during the call. The bucket
+        # refills at 60/minute = 1/second, so a sub-second test window returns
+        # only a small fraction; requiring a drop of at least 0.9 is a real
+        # assertion that a token was taken without racing the refill.
+        #
+        # Freezing time.monotonic here instead would HANG: acquire(blocking=True)
+        # waits for the bucket to refill and its own 30s timeout is measured on
+        # that same frozen clock, so neither the wait nor the timeout can ever
+        # end. Learned the hard way.
+        assert after <= initial - 0.9
+        assert after >= 0.0

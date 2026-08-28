@@ -110,6 +110,15 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(title)
         logger.info(f"Window title set to: '{title}'")
 
+        # The window must not be shrinkable below the size its content needs.
+        # _restore_window_geometry() applies whatever width and height were saved
+        # to config, and with no floor a single bad saved value reopens the app
+        # as a sliver the user then has to drag back out - on a window whose
+        # ticker table alone reserves 300px of height. A test asserted this
+        # 800x600 minimum; the call it was asserting had gone missing, which is
+        # how the guarantee was lost quietly.
+        self.setMinimumSize(800, 600)
+
         # Use branded .ico file for window icon (shows on taskbar)
         self.setWindowIcon(self._create_app_icon())
 

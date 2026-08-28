@@ -153,14 +153,23 @@ class TestAlertFlowIntegration:
             debug=True,
         )
 
-        # Perform check
+        # Perform check. The first observation of a ticker never alerts -
+        # price-gap protection - so mark it seen the way a prior sweep would.
         state = monitor.get_ticker_state("AAPL")
-        monitor._check_ticker(state)
+        state.first_check_done = True
+        alert = monitor._check_ticker(state)
 
-        # Verify alert was sent
-        alert_manager.send_high_alert.assert_called_once_with(
-            symbol="AAPL",
-            name="Apple Inc.",
-            price=250.0,
-            threshold=200.0,
-        )
+        # _check_ticker RETURNS the alert; _send_consolidated_alerts is what
+        # notifies, so that several tickers crossing in one sweep become one
+        # notification. Asserting on alert_manager here tested the pre-2026-07
+        # design and failed while alerting worked correctly.
+        assert alert is not None
+        assert alert.alert_type == "high"
+        assert alert.symbol == "AAPL"
+        assert alert.name == "Apple Inc."
+        assert alert.price == 250.0
+        assert alert.threshold == 200.0
+
+        # And the dispatch step is what reaches the alert manager.
+        monitor._send_consolidated_alerts([alert])
+        alert_manager.send_consolidated_alert.assert_called_once_with([alert])
