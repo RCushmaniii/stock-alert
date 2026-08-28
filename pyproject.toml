@@ -136,8 +136,6 @@ module = [
     "windows_toasts.*",
     "PIL.*",
     "pyautogui.*",
-    "twilio",
-    "twilio.*",
 ]
 ignore_missing_imports = true
 

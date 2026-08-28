@@ -1,8 +1,17 @@
 """
-Twilio SMS and WhatsApp notification service for StockAlert.
+WhatsApp and SMS notification client for the StockAlert desktop app.
 
-Sends notifications via Vercel backend API to avoid bundling Twilio credentials
-in the desktop app.
+Sends nothing itself. It POSTs to the StockAlert backend on Vercel, which is
+what holds the sending credentials — the desktop app ships to end users, so a
+sending credential must never be bundled into it.
+
+NAMED FOR WHAT IT DOES, DELIBERATELY. This module was called twilio_service.py
+and this class TwilioService until 2026-08-27, long after the WhatsApp send path
+moved to Meta's Cloud API on 2026-07-14. It never called the Twilio SDK even
+then — it has always been an HTTP client for the backend. The stale name cost
+real time: it is why an audit of Twilio spend concluded this app was still
+sending through Twilio. Do not reintroduce a vendor name here; the vendor
+behind the endpoint is the backend's business, not this module's.
 """
 
 from __future__ import annotations
@@ -22,11 +31,11 @@ logger = logging.getLogger(__name__)
 VERCEL_API_URL = "https://stockalert-api.vercel.app/api/send_whatsapp"
 
 
-class TwilioService:
-    """Service for sending SMS and WhatsApp notifications via Vercel backend."""
+class WhatsAppService:
+    """Sends SMS and WhatsApp notifications through the StockAlert backend."""
 
     def __init__(self) -> None:
-        """Initialize Twilio service."""
+        """Initialize the notification client."""
         self._api_key: str | None = None
         self._load_credentials()
 

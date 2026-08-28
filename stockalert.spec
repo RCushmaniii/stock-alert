@@ -37,7 +37,7 @@ hiddenimports = [
     'stockalert.core.windows_service',
     'stockalert.core.service_controller',
     'stockalert.core.api_key_manager',
-    'stockalert.core.twilio_service',
+    'stockalert.core.whatsapp_service',
     'stockalert.api',
     'stockalert.api.finnhub',
     'stockalert.ui',
