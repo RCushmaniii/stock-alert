@@ -182,29 +182,62 @@ class TestStockMonitor:
         self,
         monitor: StockMonitor,
         mock_provider: MagicMock,
-        mock_alert_manager: MagicMock,
     ) -> None:
-        """Should trigger high alert when price exceeds threshold."""
+        """Should return a high PendingAlert when price exceeds threshold.
+
+        _check_ticker RETURNS a PendingAlert; it does not notify. _check_all_tickers
+        collects them and _send_consolidated_alerts does the sending, so several
+        tickers crossing in one sweep become one notification instead of five.
+        Asserting on alert_manager here (as this test used to) tests the old
+        design and fails on the new one while alerting works fine.
+
+        first_check_done is set first because the very first observation of a
+        ticker never alerts - price-gap protection, so adding a stock already
+        above its threshold does not fire immediately.
+        """
+        state = monitor._tickers["AAPL"]
+        state.first_check_done = True
         mock_provider.get_price.return_value = 250.0  # Above 200 threshold
 
-        state = monitor._tickers["AAPL"]
-        monitor._check_ticker(state)
+        alert = monitor._check_ticker(state)
 
-        mock_alert_manager.send_high_alert.assert_called_once()
+        assert alert is not None
+        assert alert.alert_type == "high"
+        assert alert.symbol == "AAPL"
+        assert alert.price == 250.0
 
     def test_check_ticker_low_alert(
         self,
         monitor: StockMonitor,
         mock_provider: MagicMock,
-        mock_alert_manager: MagicMock,
     ) -> None:
-        """Should trigger low alert when price falls below threshold."""
+        """Should return a low PendingAlert when price falls below threshold."""
+        state = monitor._tickers["AAPL"]
+        state.first_check_done = True
         mock_provider.get_price.return_value = 100.0  # Below 150 threshold
 
-        state = monitor._tickers["AAPL"]
-        monitor._check_ticker(state)
+        alert = monitor._check_ticker(state)
 
-        mock_alert_manager.send_low_alert.assert_called_once()
+        assert alert is not None
+        assert alert.alert_type == "low"
+        assert alert.symbol == "AAPL"
+        assert alert.price == 100.0
+
+    def test_first_check_never_alerts(
+        self,
+        monitor: StockMonitor,
+        mock_provider: MagicMock,
+    ) -> None:
+        """Price-gap protection: the first observation never alerts."""
+        state = monitor._tickers["AAPL"]
+        assert not state.first_check_done
+        mock_provider.get_price.return_value = 250.0  # Well above threshold
+
+        assert monitor._check_ticker(state) is None
+        assert state.first_check_done
+
+        # The second observation at the same price does alert.
+        assert monitor._check_ticker(state) is not None
 
     def test_check_ticker_no_alert_in_range(
         self,
@@ -225,20 +258,29 @@ class TestStockMonitor:
         self,
         monitor: StockMonitor,
         mock_provider: MagicMock,
-        mock_alert_manager: MagicMock,
     ) -> None:
-        """Should not send alert during cooldown period."""
+        """Should not alert again inside the cooldown window.
+
+        last_alert_time is stamped by _send_consolidated_alerts, not by
+        _check_ticker, so this sets it the way the real dispatch path would.
+        """
+        state = monitor._tickers["AAPL"]
+        state.first_check_done = True
         mock_provider.get_price.return_value = 250.0  # Above threshold
 
-        state = monitor._tickers["AAPL"]
+        # First crossing produces an alert
+        assert monitor._check_ticker(state) is not None
 
-        # First check triggers alert
-        monitor._check_ticker(state)
-        assert mock_alert_manager.send_high_alert.call_count == 1
+        # Dispatch stamps the cooldown clock
+        state.last_alert_time = time.time()
 
-        # Second check should be blocked by cooldown
-        monitor._check_ticker(state)
-        assert mock_alert_manager.send_high_alert.call_count == 1
+        # Second crossing inside the window produces nothing
+        assert monitor._check_ticker(state) is None
+
+        # Once the window has passed, it alerts again
+        cooldown = monitor.config_manager.get("settings.cooldown", 300)
+        state.last_alert_time = time.time() - (cooldown + 1)
+        assert monitor._check_ticker(state) is not None
 
     def test_consecutive_failures_tracking(
         self,

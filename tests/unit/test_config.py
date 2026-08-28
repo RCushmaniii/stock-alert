@@ -183,21 +183,43 @@ class TestConfigManager:
         manager.reload()
         assert manager.get("settings.check_interval") == 999
 
-    def test_invalid_json_raises(self, tmp_path: Path) -> None:
-        """Should raise error for invalid JSON."""
+    def test_invalid_json_recovers(self, tmp_path: Path) -> None:
+        """Unparseable JSON is backed up and replaced with defaults.
+
+        This deliberately asserts RECOVERY, not a raise. An earlier version of
+        this test required ConfigError, which stopped matching when the app
+        gained _recover_from_corruption - a desktop app that refuses to start
+        because its own config file got truncated is worse than one that saves
+        the bad copy aside and carries on.
+
+        It also pins the bug that made recovery a lie: _save() re-read the file
+        to merge in an externally written api_key, and on the recovery path the
+        corrupt bytes were still on disk, so the JSONDecodeError escaped from
+        inside the handler for that exact corruption.
+        """
         config_path = tmp_path / "invalid.json"
         config_path.write_text("{ invalid json }")
 
-        with pytest.raises(ConfigError, match="Invalid JSON"):
-            ConfigManager(config_path)
+        manager = ConfigManager(config_path)
 
-    def test_missing_settings_raises(self, tmp_path: Path) -> None:
-        """Should raise error for config missing settings."""
+        # Recovered, not crashed
+        assert manager.get("settings.check_interval") is not None
+        # The bad file was preserved next to it
+        backups = list(tmp_path.glob("invalid.corrupted_*.json"))
+        assert len(backups) == 1
+        assert backups[0].read_text() == "{ invalid json }"
+        # And what is on disk now is valid JSON
+        json.loads(config_path.read_text())
+
+    def test_missing_settings_recovers(self, tmp_path: Path) -> None:
+        """A config missing required settings is recovered the same way."""
         config_path = tmp_path / "missing.json"
         config_path.write_text('{"tickers": []}')
 
-        with pytest.raises(ConfigError, match="Missing"):
-            ConfigManager(config_path)
+        manager = ConfigManager(config_path)
+
+        assert manager.get("settings.check_interval") is not None
+        assert len(list(tmp_path.glob("missing.corrupted_*.json"))) == 1
 
     def test_settings_property(self, temp_config_file: Path) -> None:
         """Settings property should return copy of settings."""

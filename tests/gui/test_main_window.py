@@ -66,6 +66,27 @@ def mock_translator() -> MagicMock:
     return translator
 
 
+# Ticker table column indices, mirroring the setHorizontalHeaderLabels call in
+# src/stockalert/ui/main_window.py. Bare integers here are what rotted last
+# time: a "Name" column was inserted at 4 and four tests started reading the
+# wrong cell while asserting confidently about the right one. If a column moves,
+# fix it here.
+COL_CHECKBOX = 0
+COL_LOGO = 1
+COL_SYMBOL = 2
+COL_NEWS = 3
+COL_NAME = 4
+COL_INDUSTRY = 5
+COL_MARKET_CAP = 6
+COL_HIGH_THRESHOLD = 7
+COL_LOW_THRESHOLD = 8
+COL_LAST_PRICE = 9
+COL_ENABLED = 10
+
+# Tabs currently built by MainWindow: profile, settings, tickers, news, help.
+EXPECTED_TAB_COUNT = 5
+
+
 @pytest.mark.gui
 class TestMainWindow:
     """GUI tests for MainWindow."""
@@ -85,7 +106,9 @@ class TestMainWindow:
         )
         qtbot.addWidget(window)
 
-        assert window.windowTitle() == "app.name"
+        # The title uses app.description; app.name is the application name
+        # set on QApplication, which is a different string.
+        assert window.windowTitle() == "app.description"
         assert window.minimumWidth() == 800
         assert window.minimumHeight() == 600
 
@@ -105,7 +128,7 @@ class TestMainWindow:
         qtbot.addWidget(window)
 
         assert window.tabs is not None
-        assert window.tabs.count() == 2
+        assert window.tabs.count() == EXPECTED_TAB_COUNT
 
     def test_ticker_table_populated(
         self,
@@ -123,8 +146,8 @@ class TestMainWindow:
         qtbot.addWidget(window)
 
         assert window.ticker_table.rowCount() == 2
-        assert window.ticker_table.item(0, 0).text() == "AAPL"
-        assert window.ticker_table.item(1, 0).text() == "MSFT"
+        assert window.ticker_table.item(0, COL_SYMBOL).text() == "AAPL"
+        assert window.ticker_table.item(1, COL_SYMBOL).text() == "MSFT"
 
     def test_ticker_enabled_display(
         self,
@@ -142,9 +165,9 @@ class TestMainWindow:
         qtbot.addWidget(window)
 
         # AAPL is enabled
-        assert window.ticker_table.item(0, 5).text() == "✓"
+        assert window.ticker_table.item(0, COL_ENABLED).text() == "✓"
         # MSFT is disabled
-        assert window.ticker_table.item(1, 5).text() == "✗"
+        assert window.ticker_table.item(1, COL_ENABLED).text() == "✗"
 
     def test_update_ticker_price(
         self,
@@ -162,11 +185,11 @@ class TestMainWindow:
         qtbot.addWidget(window)
 
         # Initially "--"
-        assert window.ticker_table.item(0, 4).text() == "--"
+        assert window.ticker_table.item(0, COL_LAST_PRICE).text() == "--"
 
         # Update price
         window.update_ticker_price("AAPL", 175.50)
-        assert window.ticker_table.item(0, 4).text() == "$175.50"
+        assert window.ticker_table.item(0, COL_LAST_PRICE).text() == "$175.50"
 
     def test_update_ticker_price_none(
         self,
@@ -184,7 +207,7 @@ class TestMainWindow:
         qtbot.addWidget(window)
 
         window.update_ticker_price("AAPL", None)
-        assert window.ticker_table.item(0, 4).text() == "--"
+        assert window.ticker_table.item(0, COL_LAST_PRICE).text() == "--"
 
     def test_buttons_exist(
         self,

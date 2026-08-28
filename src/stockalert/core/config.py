@@ -207,8 +207,22 @@ class ConfigManager:
             try:
                 # Read current file to pick up any external changes (e.g., api_key)
                 if self.config_path.exists():
-                    with open(self.config_path, encoding="utf-8") as f:
-                        file_config = json.load(f)
+                    try:
+                        with open(self.config_path, encoding="utf-8") as f:
+                            file_config = json.load(f)
+                    except json.JSONDecodeError:
+                        # The file on disk is unparseable, so there is nothing to
+                        # merge FROM. This is the path _recover_from_corruption
+                        # takes: it backs the bad file up, resets to defaults, and
+                        # calls _save while the corrupt bytes are still on disk.
+                        # Letting the decode error escape here defeated the whole
+                        # recovery - the app crashed on the exact corruption it
+                        # had just handled. Overwrite instead.
+                        logger.warning(
+                            "Existing config is unparseable; overwriting it "
+                            "rather than merging."
+                        )
+                        file_config = {}
                     # Preserve api_key if it exists in file but not in our config
                     if "api_key" in file_config and "api_key" not in self._config:
                         self._config["api_key"] = file_config["api_key"]
