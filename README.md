@@ -28,7 +28,7 @@
 ### Alert Channels
 
 - **Windows Toast Notifications** - Click to view stock chart
-- **WhatsApp Alerts** - Via Twilio integration (requires account)
+- **WhatsApp Alerts** - Via the hosted StockAlert backend (requires an API key)
 - **Email Alerts** - Coming soon
 
 ## Quick Start
@@ -119,13 +119,12 @@ python -m stockalert.service --remove
 
 ### Environment Variables (.env)
 
+WhatsApp needs no credentials here. The desktop app holds only a StockAlert API
+key, entered in Settings and stored in Windows Credential Manager; the sending
+credentials live on the backend, never in the app.
+
 ```env
 FINNHUB_API_KEY=your_api_key_here
-
-# For WhatsApp alerts (optional)
-TWILIO_SID=your_twilio_sid
-TWILIO_AUTH_TOKEN=your_auth_token
-TWILIO_WHATSAPP_NUMBER=+14155238886
 ```
 
 ### Configuration File (config.json)
@@ -173,7 +172,7 @@ src/stockalert/
 │   ├── config.py         # Configuration management
 │   ├── monitor.py        # Stock price monitoring
 │   ├── alert_manager.py  # Multi-channel alert dispatch
-│   ├── twilio_service.py # WhatsApp/SMS integration
+│   ├── whatsapp_service.py # WhatsApp/SMS backend client
 │   ├── service_controller.py  # Service control from GUI
 │   └── windows_service.py     # Windows Service wrapper
 ├── api/
@@ -231,9 +230,9 @@ python setup.py bdist_msi
 
 ### WhatsApp not working?
 
-1. Ensure Twilio credentials are set in `.env`
-2. You must first send "join <sandbox-keyword>" to Twilio's WhatsApp number
-3. Check your phone number includes country code (e.g., +1)
+1. Ensure your StockAlert API key is entered in Settings and saved
+2. Check your phone number includes its country code (e.g., +52 for Mexico)
+3. Confirm that number has WhatsApp installed and active
 
 ### Service won't start?
 
@@ -261,7 +260,7 @@ Proprietary - CushLabs.ai. All rights reserved.
 
 - **Finnhub** - Stock market data API
 - **PyQt6** - Cross-platform GUI framework
-- **Twilio** - WhatsApp/SMS messaging
+- **Meta WhatsApp Cloud API** - WhatsApp messaging
 - **winotify** - Windows toast notifications
 
 ---

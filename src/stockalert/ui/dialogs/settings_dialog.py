@@ -243,7 +243,7 @@ class SettingsWidget(QWidget):
         audio_layout.addStretch()
         alerts_layout.addRow("", audio_container)
 
-        # SMS alerts (hidden - requires purchased Twilio number)
+        # SMS alerts (hidden - no SMS sender is provisioned on the backend)
         # self.sms_alerts_check = QCheckBox(_("settings.alerts_sms"))
         # alerts_layout.addRow("", self.sms_alerts_check)
         # self.sms_alerts_help = QLabel(_("settings.alerts_sms_help"))
@@ -878,18 +878,22 @@ class SettingsWidget(QWidget):
             self.status_label.setText(f"✗ {e}")
             self.status_label.setStyleSheet("color: #FF0000; font-weight: bold;")
             error_msg = str(e)
-            # Check for common Twilio sandbox errors
-            if "21608" in error_msg or "not a valid" in error_msg.lower():
+            # There is no sandbox to join any more. This branch used to tell the
+            # user to text a Twilio sandbox number and quote error 21608 - a
+            # Twilio code that has been unreachable since the send path moved to
+            # Meta's Cloud API on 2026-07-14. Sending someone to join a sandbox
+            # that no longer carries their alerts is worse than showing them the
+            # real error, so this now reports what actually failed.
+            if "not a valid" in error_msg.lower() or "recipient" in error_msg.lower():
                 QMessageBox.warning(
                     self,
-                    "WhatsApp Sandbox",
-                    "Your phone number hasn't joined the Twilio Sandbox.\n\n"
-                    "To join:\n"
-                    "1. Open WhatsApp\n"
-                    "2. Send a message to +1 415 523 8886\n"
-                    "3. Type: join <your-sandbox-code>\n\n"
-                    "Find your sandbox code at:\n"
-                    "console.twilio.com > Messaging > Try it out > Send a WhatsApp message",
+                    "WhatsApp Test Failed",
+                    "That number could not receive the message.\n\n"
+                    "Check that:\n"
+                    "1. The number is entered with its country code\n"
+                    "2. It is a number with WhatsApp installed and active\n"
+                    "3. It has not blocked messages from this sender\n\n"
+                    f"Reported error: {error_msg}",
                 )
             else:
                 QMessageBox.critical(self, "WhatsApp Test Error", error_msg)
@@ -898,7 +902,7 @@ class SettingsWidget(QWidget):
 
     def _send_whatsapp_optin(self) -> None:
         """Send WhatsApp opt-in message when user first enables WhatsApp alerts."""
-        from stockalert.core.twilio_service import TwilioService
+        from stockalert.core.whatsapp_service import WhatsAppService
 
         # Get phone number from profile
         profile = self.config_manager.get("profile", {})
@@ -913,7 +917,7 @@ class SettingsWidget(QWidget):
         stock_count = len(tickers)
 
         try:
-            service = TwilioService()
+            service = WhatsAppService()
             success = service.send_optin_message(phone_number, stock_count)
 
             if success:

@@ -134,7 +134,7 @@ POST /api/send_whatsapp
 
 ### Desktop App Integration
 
-- `src/stockalert/core/twilio_service.py` calls the Vercel API (module name is legacy — it never called the Twilio SDK directly and now the backend doesn't either)
+- `src/stockalert/core/whatsapp_service.py` calls the Vercel API. Renamed from `twilio_service.py` on 2026-08-27; it never called the Twilio SDK, and the stale name had already caused one wrong conclusion in a spend audit
 - Phone numbers are validated via `phone_utils.py` using `phonenumbers` library
 
 ### API Key Authentication (Internal)
@@ -471,7 +471,7 @@ ruff format src/
 
 8. **See Also**: [`docs/LESSONS_LEARNED.md`](docs/LESSONS_LEARNED.md) for detailed troubleshooting and patterns.
 
-9. **WhatsApp via Vercel**: Desktop app does NOT call Twilio directly. It calls the Vercel backend API which handles Twilio. See "WhatsApp/SMS Backend" section above.
+9. **WhatsApp via Vercel**: The desktop app calls the Vercel backend API, which sends on Meta's WhatsApp Cloud API. Nothing in this repo calls Twilio. See "WhatsApp/SMS Backend" above.
 
 10. **Phone Validation**: Uses `phonenumbers` library in `core/phone_utils.py`. Mexican numbers with +521 prefix need special handling.
 

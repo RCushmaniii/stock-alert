@@ -2,7 +2,8 @@
 Notification service for StockAlert.
 
 Sends WhatsApp notifications via the StockAlert backend API.
-This is the production approach - users don't need their own Twilio credentials.
+This is the production approach - the sending account lives on the backend, so
+the app ships to end users holding nothing that can send on its own.
 """
 
 from __future__ import annotations
