@@ -282,6 +282,35 @@ class TestStockMonitor:
         state.last_alert_time = time.time() - (cooldown + 1)
         assert monitor._check_ticker(state) is not None
 
+    def test_one_alert_per_symbol_per_trading_day(
+        self,
+        monitor: StockMonitor,
+        mock_provider: MagicMock,
+    ) -> None:
+        """A price parked across its threshold alerts once a day, not every check.
+
+        With a 2-hour interval and a 5-minute cooldown, ALB below its low
+        threshold was re-sent on every check. Past the cooldown, the ledger
+        still holds it back until the next trading day.
+        """
+        state = monitor._tickers["AAPL"]
+        state.first_check_done = True
+        mock_provider.get_price.return_value = 250.0  # Above threshold
+
+        alert = monitor._check_ticker(state)
+        assert alert is not None
+        monitor._send_consolidated_alerts([alert])
+
+        cooldown = monitor.config_manager.get("settings.cooldown", 300)
+        state.last_alert_time = time.time() - (cooldown + 1)
+        assert monitor._check_ticker(state) is None
+
+        # The other ticker is unaffected
+        msft = monitor._tickers["MSFT"]
+        msft.first_check_done = True
+        mock_provider.get_price.return_value = 500.0
+        assert monitor._check_ticker(msft) is not None
+
     def test_consecutive_failures_tracking(
         self,
         monitor: StockMonitor,

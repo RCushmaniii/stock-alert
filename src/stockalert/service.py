@@ -22,11 +22,18 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from stockalert.core.alert_history import DailyAlertLedger
 from stockalert.core.alert_manager import AlertManager, AlertSettings
 from stockalert.core.api_key_manager import provision_stockalert_api_key
 from stockalert.core.config import ConfigManager
 from stockalert.core.monitor import StockMonitor
-from stockalert.core.paths import get_app_dir, get_bundled_assets_dir, get_config_path, migrate_config_if_needed
+from stockalert.core.paths import (
+    get_app_data_dir,
+    get_app_dir,
+    get_bundled_assets_dir,
+    get_config_path,
+    migrate_config_if_needed,
+)
 from stockalert.i18n.translator import Translator, set_translator
 from stockalert.utils.logging_config import setup_logging
 from stockalert.utils.market_hours import MarketHours
@@ -145,6 +152,7 @@ class StockAlertService:
             alert_manager=self.alert_manager,
             market_hours=self.market_hours,
             debug=self.debug,
+            alert_ledger=DailyAlertLedger(get_app_data_dir() / "alert_history.json"),
         )
 
     def _check_config_changes(self) -> bool:
