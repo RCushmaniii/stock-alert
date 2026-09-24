@@ -6,6 +6,54 @@ Entries are newest-first. Each entry documents one Claude Code working session.
 
 <!-- New entries go above this line -->
 
+## Open Items
+
+> Standing register. An item leaves this list only when it has been verified end to end.
+
+### The installed app does not have the once-per-day alert fix yet
+
+**Medium** · opened 2026-09-24 · blocks: nothing; costs repeat WhatsApp alerts while a stock sits past its threshold
+
+PR #29 (07fa9bd) is merged, but `%LOCALAPPDATA%\Programs\AI StockAlert\StockAlert.exe` (running
+`--service` and `--tray`) is the old build, which re-alerts on every 2-hour check. Robert chose to
+wait on the rebuild.
+
+**Next:** rebuild the installer (`installer.iss` via Inno Setup, see README "Create Installer") and
+reinstall, then confirm `%APPDATA%\StockAlertlert_history.json` appears after the first alert.
+
+---
+
+## Session: 2026-09-24
+
+### Accomplished
+
+- At most one price alert per symbol per US/Eastern trading day (#29). New
+  `src/stockalert/core/alert_history.py` (`DailyAlertLedger`) persists the last alert day per symbol
+  to `%APPDATA%/StockAlert/alert_history.json`; wired into `StockMonitor` and `service.py`. 106 tests pass.
+- Cause found from the live config: `check_interval` 7200 with `cooldown` 300, so ALB below $113
+  re-alerted on every check; the cooldown was in memory only and reset on restart.
+
+### Decisions Made
+
+- Persisted ledger instead of raising `cooldown` to 86400: the settings dialog clamps cooldown to
+  60–7200 and would overwrite it, and an in-memory value still resets on reboot.
+- Trading day uses US/Eastern, the market calendar, not UTC or Guadalajara local time.
+
+### Immediate Next Steps
+
+- [ ] Rebuild and reinstall the desktop app (see Open Items), when Robert wants it.
+
+### Technical Debt
+
+- `settings.cooldown` is now mostly redundant with the daily ledger; left in place.
+
+### Open Questions / Blockers
+
+- None
+
+---
+
+
 ## Session: 2026-07-25
 
 ### Accomplished
