@@ -13,6 +13,8 @@ import time
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from stockalert.core.alert_history import DailyAlertLedger
+
 if TYPE_CHECKING:
     from stockalert.api.base import BaseProvider
     from stockalert.core.alert_manager import AlertManager
@@ -77,6 +79,7 @@ class StockMonitor:
         alert_manager: AlertManager,
         market_hours: MarketHours,
         debug: bool = False,
+        alert_ledger: DailyAlertLedger | None = None,
     ) -> None:
         """Initialize the stock monitor.
 
@@ -86,12 +89,15 @@ class StockMonitor:
             alert_manager: Alert/notification manager
             market_hours: Market hours utility
             debug: If True, skip market hours checks
+            alert_ledger: Once-per-trading-day record. Defaults to an
+                in-memory ledger; the service passes a persisted one.
         """
         self.config_manager = config_manager
         self.provider = provider
         self.alert_manager = alert_manager
         self.market_hours = market_hours
         self.debug = debug
+        self.alert_ledger = alert_ledger or DailyAlertLedger()
 
         self._tickers: dict[str, TickerState] = {}
         self._running = False
@@ -229,6 +235,7 @@ class StockMonitor:
         for alert in alerts:
             if alert.symbol in self._tickers:
                 self._tickers[alert.symbol].last_alert_time = current_time
+        self.alert_ledger.record([alert.symbol for alert in alerts])
 
         # Send consolidated alert
         self.alert_manager.send_consolidated_alert(alerts)
@@ -334,6 +341,11 @@ class StockMonitor:
             time_since_alert = time.time() - state.last_alert_time
             if time_since_alert < cooldown:
                 return None
+
+        # At most one alert per symbol per trading day. A price parked across
+        # its threshold is not news on the second, third and fourth check.
+        if self.alert_ledger.alerted_today(state.symbol):
+            return None
 
         # Check high threshold
         if price >= state.high_threshold:
